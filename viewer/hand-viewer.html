@@ -962,7 +962,7 @@ function setMode(m) {
   stopPipeline();
   const toDepth = m === 'depth' && state.mode !== 'depth';
   state.mode = m;
-  if (toDepth && bakeCameraIntoView()) update(false);
+  if (toDepth) bakeView();
   applyMode();
   updateHud();
   syncHash();
@@ -973,6 +973,26 @@ function setMode(m) {
 // global rotation of the hand, theta_1, and the 3D camera goes back to the depth
 // camera's axis: the generator then renders exactly what was on screen.
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+// Fold the view into theta_1 and keep the hand where it was on screen: the generator
+// centres the rotated hand in its grid again, so the camera follows that shift.
+function bakeView() {
+  const anchor = () => {
+    scene.updateMatrixWorld(true);
+    const m = new THREE.Matrix4().copy(camera.matrixWorldInverse).multiply(hand.matrixWorld);
+    const c = new THREE.Vector3();
+    for (const p of model.sk.points.slice(0, 24)) c.add(new THREE.Vector3(...p).applyMatrix4(m));
+    return c.divideScalar(24);
+  };
+  const before = anchor();
+  if (!bakeCameraIntoView()) return false;
+  update(false);
+  const d = anchor().sub(before);   // the camera is on the depth axis: view x, y = world x, y
+  d.z = 0;
+  camera.position.add(d);
+  controls.target.add(d);
+  controls.update();
+  return true;
+}
 function bakeCameraIntoView() {
   camera.updateMatrixWorld();
   pivot.updateMatrixWorld();
@@ -989,13 +1009,13 @@ function bakeCameraIntoView() {
   view.forEach((v, i) => viewSliders[i].set(Math.round(v / DEG)));
   return true;
 }
-// Look down the depth camera's axis, keeping the zoom
+// Look down the depth camera's axis, keeping the zoom and the pan
 function resetCameraAxis() {
   pivot.rotation.set(0, 0, 0);
-  controls.target.set(0, 0, 0);
-  camera.position.set(0, 0, 400);
+  const t = controls.target;
+  camera.position.set(t.x, t.y, t.z + 400);
   camera.up.set(0, 1, 0);
-  camera.lookAt(0, 0, 0);
+  camera.lookAt(t);
   controls.update();
 }
 for (const b of document.querySelectorAll('#mode button')) b.addEventListener('click', () => setMode(b.dataset.mode));
@@ -1018,10 +1038,10 @@ function pipelineFrame(t) {
   // camera: swing round the hand, back to the depth camera's view for the depth phases
   const swing = Math.sin(Math.PI * smooth(0, 0.62, t));
   const az = 0.75 * swing, el = 0.28 * swing;
-  const dist = 400;
-  camera.position.set(dist * Math.sin(az) * Math.cos(el), dist * Math.sin(el), dist * Math.cos(az) * Math.cos(el));
-  camera.lookAt(0, 0, 0);
-  controls.target.set(0, 0, 0);
+  const dist = 400, c = controls.target;
+  camera.position.set(c.x + dist * Math.sin(az) * Math.cos(el), c.y + dist * Math.sin(el), c.z + dist * Math.cos(az) * Math.cos(el));
+  camera.up.set(0, 1, 0);
+  camera.lookAt(c);
 
   // 1. bones grow level by level, joints pop in
   const grow = smooth(0, 0.2, t) * 5.2;
@@ -1070,33 +1090,37 @@ function pipelineFrame(t) {
 let playing = null;   // {start} while the animation runs in the viewer
 const PERIOD = 6500;
 $('play').addEventListener('click', () => { if (playing) stopPipeline(); else startPipeline(); });
+// The animation starts from the current point of view: as for Depth mode, the rotation is
+// folded into theta_1, so that the final depth image is the one seen from there.
 function startPipeline() {
+  const mode = state.mode;
+  bakeView();
   state.mode = 'volume';
   applyMode();
   $('caption').hidden = false;
   controls.enabled = false;
-  pivot.rotation.y = 0;
-  fitCamera();
-  playing = { start: performance.now() };
+  playing = { start: performance.now(), mode };
   $('play').textContent = '■ Stop';
   syncHash();
 }
 function stopPipeline() {
   if (!playing) return;
+  state.mode = playing.mode;
   playing = null;
   controls.enabled = true;
   $('caption').hidden = true;
   $('play').textContent = '▶ Play the pipeline';
   buildScene();   // restore the instance matrices
   applyMode();
-  fitCamera();
+  resetCameraAxis();   // back to the point of view the animation started from
+  updateHud();
   syncHash();
 }
 
 /* ---------- Links ---------- */
 // The address keeps the gesture, mode, profile, view, edited joints, voxel grid and camera:
-// #g=101&m=volume&s=3.5&v=10,-20,0&j=13:45&r=2&c=qx,qy,qz,qw,zoom&t=x,y,z, or &play=1
-// while the pipeline animation runs (it moves the camera itself)
+// #g=101&m=volume&s=3.5&v=10,-20,0&j=13:45&r=2&c=qx,qy,qz,qw,zoom&t=x,y,z, plus &play=1
+// while the pipeline animation runs
 // Angles set with the sliders are whole degrees (v); a view that comes from rotating the
 // camera is written in radians at full precision (vr), so that the depth image is reproduced
 // exactly: a rounded angle can move a fill point to the next voxel.
@@ -1105,7 +1129,7 @@ const round = d => v => +v.toFixed(d);
 function stateToHash() {
   const q = new URLSearchParams();
   q.set('g', state.posture.id);
-  q.set('m', state.mode);
+  q.set('m', playing ? playing.mode : state.mode);
   if (state.scale !== 3) q.set('s', state.scale);
   if (state.fp !== 1) q.set('fp', state.fp);
   if (state.pw !== 4) q.set('pw', state.pw);
@@ -1121,13 +1145,14 @@ function stateToHash() {
   }
   if (state.voxelRes !== 1) q.set('r', state.voxelRes);
   // the animation moves the camera itself
-  if (playing) { q.set('play', '1'); return q.toString().replace(/%2C/g, ',').replace(/%3A/g, ':'); }
-  // the camera relative to the hand, without the slow rotation
+  // the camera relative to the hand, without the slow rotation; while the animation plays,
+  // the view is already in theta_1 and the camera is on the depth axis
   const undoSpin = pivot.quaternion.clone().invert();
-  const c = undoSpin.clone().multiply(camera.quaternion);
+  const c = playing ? new THREE.Quaternion() : undoSpin.clone().multiply(camera.quaternion);
   q.set('c', [c.x, c.y, c.z, c.w].map(round(4)).concat(round(3)(camera.zoom)).join(','));
   const t = controls.target.clone().applyQuaternion(undoSpin);
   if (t.lengthSq() > 1e-4) q.set('t', t.toArray().map(round(1)).join(','));
+  if (playing) q.set('play', '1');
   return q.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
 }
 
