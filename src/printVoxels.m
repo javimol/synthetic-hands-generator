@@ -1,4 +1,5 @@
 function ret = printVoxels(voxels,mask,cmap)
+%PRINTVOXELS Plot the occupied voxels of a volume as 3D points.
 hold on
 ret = 0;
 V=voxels;
@@ -6,7 +7,6 @@ if isempty(mask)
     mask = ones(size(voxels));    
 end
 if isempty(cmap)
-    %cmap = [0 0 0]/255;    
     cmap = zeros(256,3);    
 end
 for z=1:size(V,3)
@@ -21,7 +21,6 @@ for z=1:size(V,3)
             else
                  colorLocal = [0 0 0];
             end
-           % plot3(i,j,z,'.k');            
             plot3(i,j,z,'.','Color',colorLocal);            
         end
     end    

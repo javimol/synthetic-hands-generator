@@ -1,4 +1,7 @@
 function pout = checkRestrictions(p)
+%CHECKRESTRICTIONS Clamp hand parameters to the joint limits.
+%   pout = checkRestrictions(p) clamps every row of p (1x27 parameter
+%   vectors, see struct2plain) to the allowed range of each parameter.
 %     pplain = [p.phi1_x    p.phi1_y    p.phi1_z    p.T1_x  p.T1_y  p.T1_z]; 
 PopInitRange = [0 pi;       0 pi;        0 pi;     1 256;  1 256;  1 256];
 %     pplain = [pplain          p.phiT1_x   p.phiT1_z       p.phiT2_x   p.phiT2_z   p.phiT3_z];

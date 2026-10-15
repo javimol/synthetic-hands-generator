@@ -1,35 +1,8 @@
-function [pn] = introduceNoise(p,N,SNR)
-dB = SNR;
+function pn = introduceNoise(p,N,SNR)
+%INTRODUCENOISE N noisy copies of each row of p.
+%   Adds white Gaussian noise of power SNR (in dBW) to every parameter.
 pn = [];
 for i=1:N
-    noise= sqrt(10^(dB/10))*randn(size(p,1),size(p,2));
-    pn = [pn;p + noise];
+    noise = sqrt(10^(SNR/10))*randn(size(p,1),size(p,2));
+    pn = [pn; p + noise]; %#ok<AGROW>
 end
-%     %mean & std
-%     g.phi1_x = [0 pi/4];
-%     g.phi1_y= [0 pi/4];
-%     g.phi1_z= [0 pi/4];
-%     g.T1_x= [0 10];
-%     g.T1_y= [0 10];
-%     g.T1_z= [0 10];
-%     g.phiT1_x= [0 pi/4];
-%     g.phiT1_z= [0 pi/4];
-%     g.phiT2_x= [0 pi/4];
-%     g.phiT2_z= [0 pi/4];
-%     g.phiT3_z= [0 pi/4];
-%     g.phiI2_x= [0 pi/4];
-%     g.phiI2_z= [0 pi/4];
-%     g.phiI3_x= [0 pi/4];
-%     g.phiI4_x= [0 pi/4];
-%     g.phiM2_x= [0 pi/4];
-%     g.phiM2_z= [0 pi/4];
-%     g.phiM3_x= [0 pi/4];
-%     g.phiM4_x= [0 pi/4];
-%     g.phiR2_x= [0 pi/4];
-%     g.phiR2_z= [0 pi/4];
-%     g.phiR3_x= [0 pi/4];
-%     g.phiR4_x= [0 pi/4];
-%     g.phiL2_x= [0 pi/4];
-%     g.phiL2_z= [0 pi/4];
-%     g.phiL3_x= [0 pi/4];
-%     g.phiL4_x= [0 pi/4];

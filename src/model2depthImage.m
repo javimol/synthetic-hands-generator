@@ -1,17 +1,6 @@
-function depthImage = model2depthImage(y)
-alto = size(y,1);
-ancho= size(y,2);
-depthImage = uint8(zeros(alto,ancho));
-for i = 1:alto
-   for j = 1:ancho
-       haz = y(i,j,:);
-       [iA,iB]=find(haz==1);
-       if ~isempty(iA)
-           z = max(iB);
-       else
-           z = 0;
-       end           
-       %depthImage(ancho-j+1,i) = uint8(z);
-       depthImage(i,j) = uint8(z);
-   end
-end
+function depthImage = model2depthImage(volume)
+%MODEL2DEPTHIMAGE Depth image of a voxel volume seen along the z axis.
+%   For every (x, y) the pixel value is the largest z index occupied by the
+%   hand (0 for background), saturated to the uint8 range.
+z = reshape(1:size(volume,3), 1, 1, []);
+depthImage = uint8(max((volume==1) .* z, [], 3));

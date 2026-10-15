@@ -1,80 +1,62 @@
-function prof = generateUserProfiles(SCALE,FP_ar,P_ar,grosor)
+function prof = generateUserProfiles(scales, fingerPalmRatios, palmWidths)
+%GENERATEUSERPROFILES Hand anatomy profiles ("synthetic users").
+%   prof = generateUserProfiles(scales, fingerPalmRatios, palmWidths)
+%   returns a cell array with one profile struct for every combination of
+%   the given values. Pass [] for any argument to use its default:
+%     scales            overall hand size (default 3)
+%     fingerPalmRatios  fingers/palm aspect relation, FP-AR (default 1)
+%     palmWidths        palm width, PW; finger bases are spaced 0.25*PW*scale
+%                       apart (default 4)
+%
+%   Profile fields (lengths are in voxels):
+%     id                       profile number as a string, '1001', '1002', ...
+%     center                   centre the hand in the voxel volume
+%     phiI, phiM, phiR, phiL   splay angle of each finger about z
+%     scale, fingerPalmRatio, palmWidth
+%     palmLength, thumbPalmLength, littlePalmLength
+%                              palm segments (finger base to knuckle)
+%     proximalLength, thumbProximalLength
+%                              first phalanx
+%     tipSegmentLength         second and third phalanges
+%     fillSpacing              spacing of the fill points along each segment
+%     baseT, baseI, baseM, baseR, baseL
+%                              finger bases relative to the wrist
+if nargin < 1 || isempty(scales), scales = 3; end
+if nargin < 2 || isempty(fingerPalmRatios), fingerPalmRatios = 1; end
+if nargin < 3 || isempty(palmWidths), palmWidths = 4; end
 
-if isempty(SCALE)
-    SCALE = 3;
-end
+base.center = true;
+% Splay angle of each finger
+base.phiI = -pi/18;
+base.phiM = 0;
+base.phiR = pi/18;
+base.phiL = pi/9;
 
-if isempty(FP_ar)
-    FP_ar = 1;
-end
-if isempty(P_ar)
-    P_ar = 4;
-end
-if isempty(grosor)
-    grosor = 1;
-end
-
-dataLocal.usr = '0';
-dataLocal.flagOffset = true;
-
-%Angulo de cada dedo
-dataLocal.phiI=-pi/18;
-dataLocal.phiM=0;
-dataLocal.phiR=pi/18;
-dataLocal.phiL=pi/9;
-
-counter = 1;
-for s =1:length(SCALE)
-    scaleLocal= SCALE(s);
-    display ( '****************************');
-    display ( ['Scale: ' num2str(scaleLocal)]);
-    dataLocal.SCALE = scaleLocal;
-    %default 3
-    %Longitud Falanges 
-    dataLocal.LPalma = 6*scaleLocal;
-    dataLocal.LPalma_T = 4*scaleLocal;
-    dataLocal.LPalma_L = 3*scaleLocal;
-    dataLocal.L2 = 3*scaleLocal;
-    dataLocal.L2_T=3*scaleLocal;
-    dataLocal.LExtremos = 2*scaleLocal;
-    dataLocal.LSegmentosRelleno=scaleLocal/2;
-    for i=1:length(FP_ar)
-        FP_ar_Local = FP_ar(i);
-        dataLocal.FP_ar=FP_ar_Local;
-        display ( '****************************');
-        display ( ['Fingers|Palm Aspect Relation: ' num2str(FP_ar_Local)]);
-        %default 1
-        dataLocal.L2 = FP_ar_Local*dataLocal.L2;
-        dataLocal.L2_T=FP_ar_Local*dataLocal.L2_T;
-        dataLocal.LExtremos = FP_ar_Local*dataLocal.LExtremos;
-        %%%%%%%%%%%%%%%
-        for j=1:length(P_ar)
-            P_ar_Local = P_ar(j);
-            dataLocal.P_ar=P_ar_Local;
-             display ( '   ****************************');
-             display ( ['   Palm Aspect Relation: ' num2str(P_ar_Local)]);
-             %P_ar por defecto = 4: denominador de h=1/base del triangulo
-            Lstep = 0.25*P_ar_Local;
-            dataLocal.rrelT = [2*Lstep Lstep 0]'*scaleLocal;
-            dataLocal.rrelI = [Lstep Lstep 0]'*scaleLocal;
-            dataLocal.rrelM = [0 Lstep 0]'*scaleLocal;
-            dataLocal.rrelR = [-Lstep Lstep 0]'*scaleLocal;
-            dataLocal.rrelL = [-2*Lstep Lstep 0]'*scaleLocal;
-            %%%%%%%%%%%%%%%
-            for k = 1:length(grosor)
-                grosorLocal = grosor(k);
-                display ( '      ****************************');
-                display ( ['      Width: ' num2str(grosorLocal)]);
-                %default 1
-                dataLocal.Rdil= grosorLocal;
-                %%%%%%%%%%%%%%%
-                dataLocal.usr =[num2str(1000+counter)];
-                prof{counter} = dataLocal;
-                counter = counter+1;
-            end
+prof = {};
+for s = scales
+    for fp = fingerPalmRatios
+        for pw = palmWidths
+            d = base;
+            d.id = num2str(1000 + numel(prof) + 1);
+            d.scale = s;
+            d.fingerPalmRatio = fp;
+            d.palmWidth = pw;
+            % Segment lengths
+            d.palmLength = 6*s;
+            d.thumbPalmLength = 4*s;
+            d.littlePalmLength = 3*s;
+            d.proximalLength = fp*3*s;
+            d.thumbProximalLength = fp*3*s;
+            d.tipSegmentLength = fp*2*s;
+            d.fillSpacing = s/2;
+            % Finger bases, 0.25*PW*scale apart
+            step = 0.25*pw;
+            d.baseT = [2*step step 0]'*s;
+            d.baseI = [step step 0]'*s;
+            d.baseM = [0 step 0]'*s;
+            d.baseR = [-step step 0]'*s;
+            d.baseL = [-2*step step 0]'*s;
+            prof{end+1} = d; %#ok<AGROW>
         end
     end
-end
-if counter==1
-    prof{counter}=data0;
 end

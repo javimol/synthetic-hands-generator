@@ -1,17 +1,23 @@
 function [p,pplain] =generateHandParameters(semanticData)
-% 1: Enumerate One---
-% 2: Enumerate Two---
-% 3: Enumerate Three---
-% 4: Enumerate Four---
-% 5: Enumerate Five---
-% 6: Ok---
-% 7: Stop---
-% 8: Fist---
-% 201: 7
-% 202: Jedi
-% 203: 2
-% 204: 8
-% 205: OkPalmaDerecha
+%GENERATEHANDPARAMETERS Joint parameters of the postures in the dictionary.
+%   [p, pplain] = generateHandParameters(ids) returns a cell array with the
+%   parameter struct of each posture id, and the same parameters as rows of
+%   a matrix (see struct2plain). With ids = [] it returns a single example
+%   pose as a struct.
+%
+%   Posture ids:
+%     1-8      One, Two, Three, Four, Five, Ok, Stop, Fist
+%     11, 12   additional postures
+%     101-104  miscellaneous postures
+%     201-205  Soutschek et al. (2008): 201 = Stop (as 7), 202 = Jedi,
+%              203 = Two (as 2), 204 = Fist (as 8), 205 = Ok, palm right
+%     301-312  Kollorz et al. (2008), 12 postures
+%     401-427  Spanish Sign Language alphabet, static letters a-z
+%
+%   Parameters (radians, translation in voxels):
+%     phi1_x, phi1_y, phi1_z, T1_x, T1_y, T1_z   global rotation and position
+%     phiT1_x, phiT1_z, phiT2_x, phiT2_z, phiT3_z thumb joints
+%     phi<F>2_x, phi<F>2_z, phi<F>3_x, phi<F>4_x  joints of finger F = I, M, R, L
 if isempty(semanticData)
     %Global
     p.phi1_x= pi/4; p.phi1_y= 0;p.phi1_z= 0; p.T1_x= 0;p.T1_y= 0;p.T1_z= 0;
@@ -34,7 +40,7 @@ if isempty(semanticData)
     pplain = [pplain p.phiL2_x p.phiL2_z p.phiL3_x p.phiL4_x];
     return;
 end
-             %Angulo de cada dedo
+             %Splay angle of each finger
                     phiI=-pi/18;
                     phiM=0;
                     phiR=pi/18;
@@ -262,7 +268,7 @@ for i=1:length(semanticData)
             %Little
             pLocal.phiL2_x= pi/2;pLocal.phiL2_z= 0;pLocal.phiL3_x=pi/2;pLocal.phiL4_x= pi/2;
        case {301}
-             %Angulo de cada dedo
+             %Splay angle of each finger
                     phiI=-pi/18;
                     phiM=0;
                     phiR=pi/18;

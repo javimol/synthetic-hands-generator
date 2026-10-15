@@ -25,3 +25,34 @@ b = dilateBall(v, 2);
 assert(nnz(b) == 81, sprintf('ball r=2 has %d voxels', nnz(b)));
 assert(isequal(b, flip(b, 1)) && isequal(b, flip(b, 2)) && isequal(b, flip(b, 3)));
 fprintf('ok: dilateBall\n');
+
+% 4. make_dataset writes one image and one index row per sample, and the
+%    keypoints land on the hand surface.
+addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'scripts'));
+outDir = tempname();
+make_dataset('custom', 'Postures', [5 8], 'FingerPalmRatios', [1 1.2], ...
+             'Views', 2, 'ViewRange', [0 pi/8; -pi/8 pi/8; -pi/8 pi/8], 'OutputDir', outDir);
+images = dir(fullfile(outDir, '*.png'));
+assert(numel(images) == 8, sprintf('%d images instead of 8', numel(images)));
+fid = fopen(fullfile(outDir, 'index.csv'));
+header = strsplit(fgetl(fid), ',');
+assert(numel(header) == 42);
+rows = 0;
+while true
+    l = fgetl(fid);
+    if ~ischar(l), break; end
+    rows = rows + 1;
+    c = strsplit(l, ',');
+    if str2double(c{3}) ~= 5, continue; end   % open hand: nothing in front of the joints
+    d = imread(fullfile(outDir, c{1}));
+    kp = str2double(c(end-8:end));
+    for j = 0:2
+        gap = double(d(kp(3*j+1), kp(3*j+2))) - kp(3*j+3);
+        assert(gap >= 0 && gap <= 4, sprintf('%s: keypoint %d is %d voxels from the surface', c{1}, j, gap));
+    end
+end
+fclose(fid);
+assert(rows == 8, sprintf('%d index rows instead of 8', rows));
+if exist('OCTAVE_VERSION', 'builtin'), confirm_recursive_rmdir(false, 'local'); end
+rmdir(outDir, 's');
+fprintf('ok: make_dataset\n');
