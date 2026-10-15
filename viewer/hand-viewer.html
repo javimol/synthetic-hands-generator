@@ -108,14 +108,6 @@ details .group { margin-top: 10px; }
   display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   font-family: var(--font-data); font-size: 11.5px; color: var(--stage-ink); opacity: 0.8;
 }
-.depth-view {
-  position: absolute; inset: 0; display: grid; place-items: center; padding: 24px 24px 48px;
-}
-.depth-view canvas {
-  image-rendering: pixelated; image-rendering: crisp-edges;
-  max-width: 100%; max-height: 100%; aspect-ratio: 176 / 144; width: min(100%, 880px);
-  outline: 1px solid #2a2e35; cursor: crosshair;
-}
 .caption {
   position: absolute; left: 0; right: 0; bottom: 7%; text-align: center; pointer-events: none;
   font-family: var(--font-data); font-size: 15px; letter-spacing: 0.06em; color: var(--stage-ink);
@@ -194,7 +186,6 @@ body.logo .stage { width: var(--logo-size, 360px); height: var(--logo-size, 360p
   </aside>
 
   <main class="stage" id="stage">
-    <div class="depth-view" id="depth-view" hidden><canvas id="depth" width="176" height="144" aria-label="Depth image"></canvas></div>
     <div class="caption" id="caption" hidden></div>
     <div class="hud"><span id="hud-left"></span><span id="hud-right"></span></div>
   </main>
@@ -628,21 +619,27 @@ function buildScene() {
   blobMaterial.uniforms.uZmax.value = zmax;
   blobMaterial.uniforms.uGain.value = Math.min(6, 195 / range) / 255;
 
-  // Depth image as a plane in model space, pixel-aligned with the voxels
-  const tex = new THREE.DataTexture(depthRGBA(true), LY, LX, THREE.RGBAFormat);
+  // The depth image as a plane in model space, one pixel per voxel, in front of the hand:
+  // Depth mode shows the whole 176x144 frame, the animation only the hand
+  objects.depthFrame = depthPlane(false, zmax + radius + 1);
+  objects.depthPlane = depthPlane(true, zmax + radius + 1);
+
+  for (const o of Object.values(objects)) { o.frustumCulled = false; hand.add(o); }
+  if (state.mode === 'voxels') buildVoxels();
+}
+
+function depthPlane(transparentBackground, z) {
+  const tex = new THREE.DataTexture(depthRGBA(transparentBackground), LY, LX, THREE.RGBAFormat);
   tex.magFilter = tex.minFilter = THREE.NearestFilter;
   tex.flipY = false;
   tex.needsUpdate = true;
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(LY, LX),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    new THREE.MeshBasicMaterial({ map: tex, transparent: transparentBackground, depthWrite: false }));
   // pixel (row i, col j) is model (j - off1, LX - (i - off0)); texture row 0 = image row 1 at the top
-  plane.position.set((1 + LY) / 2 - model.offset[1], LX - ((1 + LX) / 2 - model.offset[0]), zmax + radius + 1);
+  plane.position.set((1 + LY) / 2 - model.offset[1], LX - ((1 + LX) / 2 - model.offset[0]), z);
   plane.scale.y = -1;
   plane.renderOrder = 2;
-  objects.depthPlane = plane;
-
-  for (const o of Object.values(objects)) { o.frustumCulled = false; hand.add(o); }
-  if (state.mode === 'voxels') buildVoxels();
+  return plane;
 }
 
 // Surface voxels of the dilated volume
@@ -682,18 +679,19 @@ function depthRGBA(transparentBackground) {
   }
   return out;
 }
-const depthCanvas = $('depth');
-function drawDepth() {
-  const ctx = depthCanvas.getContext('2d');
-  ctx.putImageData(new ImageData(new Uint8ClampedArray(depthRGBA(false).buffer), LY, LX), 0, 0);
-}
-depthCanvas.addEventListener('mousemove', e => {
-  const r = depthCanvas.getBoundingClientRect();
-  const col = Math.floor((e.clientX - r.left) / r.width * LY), row = Math.floor((e.clientY - r.top) / r.height * LX);
-  if (row < 0 || col < 0 || row >= LX || col >= LY) return;
+// Pixel under the pointer in Depth mode
+const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
+renderer.domElement.addEventListener('pointermove', e => {
+  if (state.mode !== 'depth' || playing) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObject(objects.depthFrame)[0];
+  if (!hit) { updateHud(); return; }
+  const row = Math.min(LX - 1, Math.floor(hit.uv.y * LX)), col = Math.min(LY - 1, Math.floor(hit.uv.x * LY));
   $('hud-right').textContent = `row ${row + 1}, col ${col + 1}: depth ${model.depth[row * LY + col]}`;
 });
-depthCanvas.addEventListener('mouseleave', updateHud);
+renderer.domElement.addEventListener('pointerleave', () => updateHud());
 $('save').addEventListener('click', () => {
   // the stored image values, not the display mapping
   const c = document.createElement('canvas');
@@ -722,7 +720,6 @@ function update(rebuildView = true) {
   const o = model.offset;
   centre = [(LY + 1) / 2 - o[1], LX - ((LX + 1) / 2 - o[0]), (LZ + 1) / 2 - o[2]];
   buildScene();
-  drawDepth();
   applyMode();
   if (rebuildView) fitCamera();
   updateHud();
@@ -734,11 +731,12 @@ function applyMode() {
   objects.fill.visible = objects.palm.visible = m === 'skeleton' && state.seeds;
   objects.blobs.visible = m === 'volume';
   objects.depthPlane.visible = false;
+  objects.depthFrame.visible = m === 'depth';
+  // the depth camera does not move: zoom and pan, but no orbit
+  controls.enableRotate = m !== 'depth';
   if (m === 'voxels') buildVoxels();
   if (objects.voxels) objects.voxels.visible = m === 'voxels';
   blobMaterial.uniforms.uDepth.value = 0;
-  $('depth-view').hidden = m !== 'depth';
-  renderer.domElement.style.visibility = m === 'depth' ? 'hidden' : 'visible';
   $('save').hidden = m !== 'depth';
   for (const b of document.querySelectorAll('#mode button')) b.setAttribute('aria-pressed', b.dataset.mode === m);
 }
@@ -768,7 +766,9 @@ function fitCamera() {
   for (const p of pts) r = Math.max(r, Math.hypot(p[0] - centre[0], p[1] - centre[1], p[2] - centre[2]));
   viewSize = 2 * (r + model.radius) * 1.12;
   // a little off the depth camera's axis, so that the 3D views read as 3D
-  const az = playing || LOGO ? 0 : -0.45, el = playing || LOGO ? 0 : 0.22;
+  const axis = playing || LOGO || state.mode === 'depth';
+  const az = axis ? 0 : -0.45, el = axis ? 0 : 0.22;
+  stopOrbit();
   camera.position.set(400 * Math.sin(az) * Math.cos(el), 400 * Math.sin(el), 400 * Math.cos(az) * Math.cos(el));
   camera.zoom = 1;
   controls.target.set(0, 0, 0);
@@ -906,8 +906,15 @@ function bakeCameraIntoView() {
   view.forEach((v, i) => viewSliders[i].set(Math.round(v / DEG)));
   return true;
 }
+// Drop the orbit's momentum: without damping, update() applies what is left and clears it
+function stopOrbit() {
+  controls.enableDamping = false;
+  controls.update();
+  controls.enableDamping = true;
+}
 // Look down the depth camera's axis, keeping the zoom
 function resetCameraAxis() {
+  stopOrbit();
   pivot.rotation.set(0, 0, 0);
   controls.target.set(0, 0, 0);
   camera.position.set(0, 0, 400);
@@ -990,8 +997,6 @@ $('play').addEventListener('click', () => {
   if (playing) { stopPipeline(); return; }
   state.mode = 'volume';
   applyMode();
-  $('depth-view').hidden = true;
-  renderer.domElement.style.visibility = 'visible';
   $('caption').hidden = false;
   controls.enabled = false;
   pivot.rotation.y = 0;
