@@ -65,6 +65,11 @@ h1 { margin: 0; font: 500 28px/1.1 var(--font-display); letter-spacing: -0.01em;
 }
 .seg button:first-child { border-left: 0; }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.share-url {
+  font: 11.5px var(--font-data); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 5px 8px; min-width: 0;
+}
+.row-res { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; }
 
 select {
   font: inherit; color: var(--ink); background: var(--paper);
@@ -142,10 +147,21 @@ body.logo .stage { width: var(--logo-size, 360px); height: var(--logo-size, 360p
         <button type="button" data-mode="voxels" title="Key 3">Voxels</button>
         <button type="button" data-mode="depth" title="Key 4">Depth</button>
       </div>
+      <div class="row-res" id="res-row" hidden>
+        <span class="label" id="res-label">Voxel grid</span>
+        <div class="seg" id="res" role="group" aria-labelledby="res-label">
+          <button type="button" data-res="1" title="The generator's grid: one voxel per depth-image pixel">1×</button>
+          <button type="button" data-res="2">2×</button>
+          <button type="button" data-res="3">3×</button>
+          <button type="button" data-res="4">4×</button>
+        </div>
+      </div>
       <div class="buttons">
         <button type="button" class="btn" id="play">▶ Play the pipeline</button>
+        <button type="button" class="btn" id="share">Copy link</button>
         <button type="button" class="btn" id="save" hidden>Save depth PNG</button>
       </div>
+      <input type="text" class="share-url" id="share-url" readonly hidden aria-label="Link to this view">
     </div>
 
     <div class="group">
@@ -181,7 +197,7 @@ body.logo .stage { width: var(--logo-size, 360px); height: var(--logo-size, 360p
       <label class="check"><input type="checkbox" id="seeds" checked> Seed points in skeleton view</label>
     </div>
 
-    <p class="credit">Javier Molina Vela. Drag to orbit, scroll or pinch to zoom, right-drag to pan. Keys 1–4 switch the render mode.
+    <p class="credit">Javier Molina Vela. Drag to rotate freely, scroll or pinch to zoom, right-drag to pan. Keys 1–4 switch the render mode. Copy link shares exactly this view.
       <a href="https://github.com/javimol/synthetic-hands-generator">Source and method</a>.</p>
   </aside>
 
@@ -463,7 +479,7 @@ if (typeof module !== 'undefined') module.exports = HandModel;
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TrackballControls.js"></script>
 
 <script>
 'use strict';
@@ -477,7 +493,7 @@ const DEG = Math.PI / 180;
 /* ---------- State ---------- */
 const state = {
   mode: 'skeleton', dict: 0, posture: DICTS[0].postures[4],   // Enum5, the open hand
-  scale: 3, fp: 1, pw: 4, view: [0, 0, 0], joints: null, spin: false, seeds: true,
+  scale: 3, fp: 1, pw: 4, view: [0, 0, 0], joints: null, spin: false, seeds: true, voxelRes: 1,
 };
 let model = null;          // HandModel.render result for the current state
 let centre = [0, 0, 0];    // model-space centre of the grid (the hand is centred in it)
@@ -493,8 +509,13 @@ scene.background = new THREE.Color(0x0d0f12);
 // Orthographic, like the projection of the depth image
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -2000, 2000);
 camera.position.set(0, 0, 400);
-const controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
+// Trackball: rotation without limits (over the poles, and rolling), no inertia
+const controls = new THREE.TrackballControls(camera, renderer.domElement);
+controls.rotateSpeed = 2.5;
+controls.zoomSpeed = 1.2;
+controls.panSpeed = 0.8;
+controls.staticMoving = true;
+controls.keys = [];
 scene.add(new THREE.HemisphereLight(0xfff4ea, 0x2a2f38, 0.75));
 const sun = new THREE.DirectionalLight(0xffffff, 0.8);
 sun.position.set(0.4, 0.6, 1);
@@ -642,9 +663,13 @@ function depthPlane(transparentBackground, z) {
   return plane;
 }
 
-// Surface voxels of the dilated volume
+// Surface voxels of the dilated volume. 1x is the generator's grid; finer grids rebuild the same
+// volume (a ball of radius 0.8 s on every seed point) with a step of 1/k voxel.
+const MAX_CELLS = 40e6;
 function buildVoxels() {
   if (objects.voxels) return;
+  if (state.voxelRes > 1) { buildFineVoxels(state.voxelRes); return; }
+  model.voxelRes = 1;
   const vol = HandModel.volume(model.voxels, model.radius);
   const at = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= LX || y >= LY || z >= LZ) ? 0 : vol[(x * LY + y) * LZ + z];
   const surface = [];
@@ -665,6 +690,57 @@ function buildVoxels() {
   hand.add(mesh);
   model.surfaceVoxels = surface.length;
 }
+
+function buildFineVoxels(want) {
+  const pts = model.sk.points, roundHalfAway = v => Math.sign(v) * Math.round(Math.abs(v));
+  // largest factor <= want whose grid stays under MAX_CELLS
+  let k = want, seeds, lo, n;
+  for (; k > 1; k--) {
+    const R = model.radius * k, pad = Math.ceil(R) + 1;
+    seeds = [...new Set(pts.map(p => p.map(c => roundHalfAway(c * k)).join(',')))].map(t => t.split(',').map(Number));
+    lo = [0, 1, 2].map(d => Math.min(...seeds.map(q => q[d])) - pad);
+    n = [0, 1, 2].map(d => Math.max(...seeds.map(q => q[d])) + pad - lo[d] + 1);
+    if (n[0] * n[1] * n[2] <= MAX_CELLS) break;
+  }
+  if (k === 1) { state.voxelRes = 1; buildVoxels(); return; }
+  const [n0, n1, n2] = n, vol = new Uint8Array(n0 * n1 * n2), { offsets } = HandModel.ball(model.radius * k);
+  for (const q of seeds) {
+    const x0 = q[0] - lo[0], y0 = q[1] - lo[1], z0 = q[2] - lo[2];
+    for (const [dx, dy, dz] of offsets) vol[((x0 + dx) * n1 + (y0 + dy)) * n2 + (z0 + dz)] = 1;
+  }
+  const surface = [];
+  for (let x = 1; x < n0 - 1; x++) for (let y = 1; y < n1 - 1; y++) for (let z = 1; z < n2 - 1; z++) {
+    const i = (x * n1 + y) * n2 + z;
+    if (!vol[i]) continue;
+    if (vol[i - n1 * n2] && vol[i + n1 * n2] && vol[i - n2] && vol[i + n2] && vol[i - 1] && vol[i + 1]) continue;
+    surface.push(x + lo[0], y + lo[1], z + lo[2]);
+  }
+  const box = new THREE.BoxGeometry(1 / k, 1 / k, 1 / k);
+  const count = surface.length / 3;
+  const mesh = instanced(box, new THREE.MeshStandardMaterial({ color: COLORS.skin, roughness: 0.9 }), count);
+  for (let i = 0; i < count; i++) {
+    tmpM.makeTranslation(surface[3 * i] / k, surface[3 * i + 1] / k, surface[3 * i + 2] / k);
+    mesh.setMatrixAt(i, tmpM);
+  }
+  mesh.frustumCulled = false;
+  objects.voxels = mesh;
+  hand.add(mesh);
+  model.surfaceVoxels = count;
+  model.voxelRes = k;
+}
+function setVoxelRes(k) {
+  state.voxelRes = k;
+  if (objects.voxels) {
+    hand.remove(objects.voxels);
+    objects.voxels.geometry.dispose();
+    objects.voxels.material.dispose();
+    delete objects.voxels;
+  }
+  applyMode();
+  updateHud();
+  syncHash();
+}
+for (const b of document.querySelectorAll('#res button')) b.addEventListener('click', () => setVoxelRes(+b.dataset.res));
 
 /* ---------- Depth image ---------- */
 // Display mapping of the README figures: the nearest voxel is white, at most 6 grey levels per voxel
@@ -723,6 +799,7 @@ function update(rebuildView = true) {
   applyMode();
   if (rebuildView) fitCamera();
   updateHud();
+  syncHash();
 }
 
 function applyMode() {
@@ -732,19 +809,22 @@ function applyMode() {
   objects.blobs.visible = m === 'volume';
   objects.depthPlane.visible = false;
   objects.depthFrame.visible = m === 'depth';
-  // the depth camera does not move: zoom and pan, but no orbit
-  controls.enableRotate = m !== 'depth';
+  // the depth camera does not move: zoom and pan, but no rotation
+  controls.noRotate = m === 'depth';
   if (m === 'voxels') buildVoxels();
   if (objects.voxels) objects.voxels.visible = m === 'voxels';
   blobMaterial.uniforms.uDepth.value = 0;
   $('save').hidden = m !== 'depth';
+  $('res-row').hidden = m !== 'voxels';
+  for (const b of document.querySelectorAll('#res button')) b.setAttribute('aria-pressed', +b.dataset.res === (model.voxelRes || state.voxelRes));
   for (const b of document.querySelectorAll('#mode button')) b.setAttribute('aria-pressed', b.dataset.mode === m);
 }
 
 function updateHud() {
   if (!model) return;
   const n = model.depth.reduce((a, v) => a + (v > 0), 0);
-  const extra = state.mode === 'voxels' && model.surfaceVoxels ? `, ${model.surfaceVoxels} surface voxels` : '';
+  const extra = state.mode === 'voxels' && model.surfaceVoxels
+    ? `, ${model.surfaceVoxels} surface voxels${model.voxelRes > 1 ? ` (grid ${model.voxelRes}×)` : ''}` : '';
   $('hud-left').textContent = `${state.posture.name} (id ${state.posture.id})${state.joints ? ', edited' : ''}`;
   $('hud-right').textContent = `${model.sk.points.length} seed points, ball r = ${model.radius.toFixed(1)}${extra}, ${n} hand pixels`;
 }
@@ -757,6 +837,7 @@ function resize() {
   camera.left = -half * Math.max(aspect, 1); camera.right = half * Math.max(aspect, 1);
   camera.top = half / Math.min(aspect, 1); camera.bottom = -half / Math.min(aspect, 1);
   camera.updateProjectionMatrix();
+  controls.handleResize();
 }
 let viewSize = 100;
 function fitCamera() {
@@ -768,8 +849,9 @@ function fitCamera() {
   // a little off the depth camera's axis, so that the 3D views read as 3D
   const axis = playing || LOGO || state.mode === 'depth';
   const az = axis ? 0 : -0.45, el = axis ? 0 : 0.22;
-  stopOrbit();
   camera.position.set(400 * Math.sin(az) * Math.cos(el), 400 * Math.sin(el), 400 * Math.cos(az) * Math.cos(el));
+  camera.up.set(0, 1, 0);
+  camera.lookAt(0, 0, 0);
   camera.zoom = 1;
   controls.target.set(0, 0, 0);
   controls.update();
@@ -883,10 +965,11 @@ function setMode(m) {
   if (toDepth && bakeCameraIntoView()) update(false);
   applyMode();
   updateHud();
+  syncHash();
 }
 
 // The depth image is taken by a fixed camera looking down -z. To show it from the
-// point of view of the 3D modes, the orbit (and "Rotate slowly") is folded into the
+// point of view of the 3D modes, the rotation (and "Rotate slowly") is folded into the
 // global rotation of the hand, theta_1, and the 3D camera goes back to the depth
 // camera's axis: the generator then renders exactly what was on screen.
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -906,15 +989,8 @@ function bakeCameraIntoView() {
   view.forEach((v, i) => viewSliders[i].set(Math.round(v / DEG)));
   return true;
 }
-// Drop the orbit's momentum: without damping, update() applies what is left and clears it
-function stopOrbit() {
-  controls.enableDamping = false;
-  controls.update();
-  controls.enableDamping = true;
-}
 // Look down the depth camera's axis, keeping the zoom
 function resetCameraAxis() {
-  stopOrbit();
   pivot.rotation.set(0, 0, 0);
   controls.target.set(0, 0, 0);
   camera.position.set(0, 0, 400);
@@ -993,8 +1069,8 @@ function pipelineFrame(t) {
 
 let playing = null;   // {start} while the animation runs in the viewer
 const PERIOD = 6500;
-$('play').addEventListener('click', () => {
-  if (playing) { stopPipeline(); return; }
+$('play').addEventListener('click', () => { if (playing) stopPipeline(); else startPipeline(); });
+function startPipeline() {
   state.mode = 'volume';
   applyMode();
   $('caption').hidden = false;
@@ -1003,7 +1079,8 @@ $('play').addEventListener('click', () => {
   fitCamera();
   playing = { start: performance.now() };
   $('play').textContent = '■ Stop';
-});
+  syncHash();
+}
 function stopPipeline() {
   if (!playing) return;
   playing = null;
@@ -1013,7 +1090,126 @@ function stopPipeline() {
   buildScene();   // restore the instance matrices
   applyMode();
   fitCamera();
+  syncHash();
 }
+
+/* ---------- Links ---------- */
+// The address keeps the gesture, mode, profile, view, edited joints, voxel grid and camera:
+// #g=101&m=volume&s=3.5&v=10,-20,0&j=13:45&r=2&c=qx,qy,qz,qw,zoom&t=x,y,z, or &play=1
+// while the pipeline animation runs (it moves the camera itself)
+// Angles set with the sliders are whole degrees (v); a view that comes from rotating the
+// camera is written in radians at full precision (vr), so that the depth image is reproduced
+// exactly: a rounded angle can move a fill point to the next voxel.
+const MODES = ['skeleton', 'volume', 'voxels', 'depth'];
+const round = d => v => +v.toFixed(d);
+function stateToHash() {
+  const q = new URLSearchParams();
+  q.set('g', state.posture.id);
+  q.set('m', state.mode);
+  if (state.scale !== 3) q.set('s', state.scale);
+  if (state.fp !== 1) q.set('fp', state.fp);
+  if (state.pw !== 4) q.set('pw', state.pw);
+  if (state.view.some(v => v)) {
+    const deg = state.view.map(v => Math.round(v / DEG));
+    if (deg.every((d, i) => d * DEG === state.view[i])) q.set('v', deg.join(','));
+    else q.set('vr', state.view.join(','));
+  }
+  if (state.joints) {
+    const edited = [];
+    for (let i = 6; i < 27; i++) if (state.joints[i] !== state.posture.p[i]) edited.push(`${i}:${Math.round(state.joints[i] / DEG)}`);
+    if (edited.length) q.set('j', edited.join(','));
+  }
+  if (state.voxelRes !== 1) q.set('r', state.voxelRes);
+  // the animation moves the camera itself
+  if (playing) { q.set('play', '1'); return q.toString().replace(/%2C/g, ',').replace(/%3A/g, ':'); }
+  // the camera relative to the hand, without the slow rotation
+  const undoSpin = pivot.quaternion.clone().invert();
+  const c = undoSpin.clone().multiply(camera.quaternion);
+  q.set('c', [c.x, c.y, c.z, c.w].map(round(4)).concat(round(3)(camera.zoom)).join(','));
+  const t = controls.target.clone().applyQuaternion(undoSpin);
+  if (t.lengthSq() > 1e-4) q.set('t', t.toArray().map(round(1)).join(','));
+  return q.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
+}
+
+function applyHash() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  const id = +q.get('g');
+  const dict = DICTS.findIndex(d => d.postures.some(g => g.id === id));
+  if (dict < 0) return false;
+  const num = (k, def, lo, hi) => { const v = +q.get(k); return q.has(k) && Number.isFinite(v) ? Math.min(Math.max(v, lo), hi) : def; };
+  const list = k => (q.get(k) || '').split(',').map(Number);
+  stopPipeline();
+  state.dict = dict;
+  state.posture = DICTS[dict].postures.find(g => g.id === id);
+  state.mode = MODES.includes(q.get('m')) ? q.get('m') : 'skeleton';
+  state.scale = num('s', 3, 2, 7.5);
+  state.fp = num('fp', 1, 0.7, 1.5);
+  state.pw = num('pw', 4, 2, 5);
+  const v = list('v'), vr = list('vr');
+  state.view = [0, 1, 2].map(i => q.has('vr') ? (Number.isFinite(vr[i]) ? vr[i] : 0)
+                                              : (Number.isFinite(v[i]) ? v[i] * DEG : 0));
+  state.joints = null;
+  for (const pair of (q.get('j') || '').split(',').filter(Boolean)) {
+    const [i, deg] = pair.split(':').map(Number);
+    if (!(i >= 6 && i < 27 && Number.isFinite(deg))) continue;
+    if (!state.joints) state.joints = state.posture.p.slice();
+    state.joints[i] = deg * DEG;
+  }
+  state.voxelRes = [1, 2, 3, 4].includes(+q.get('r')) ? +q.get('r') : 1;
+  if (objects.voxels) { hand.remove(objects.voxels); delete objects.voxels; }
+
+  $('dict').value = dict;
+  showGestures();
+  syncJointSliders();
+  profileSliders.scale.set(state.scale); profileSliders.fp.set(state.fp); profileSliders.pw.set(state.pw);
+  state.view.forEach((a, i) => viewSliders[i].set(Math.round(a / DEG)));
+  pivot.rotation.set(0, 0, 0);
+  update(true);
+
+  const c = list('c');
+  if (c.length === 5 && c.every(Number.isFinite) && c[4] > 0) {
+    const quat = new THREE.Quaternion(c[0], c[1], c[2], c[3]).normalize();
+    const t = list('t');
+    const target = t.length === 3 && t.every(Number.isFinite) ? new THREE.Vector3(...t) : new THREE.Vector3();
+    controls.target.copy(target);
+    camera.position.set(0, 0, 400).applyQuaternion(quat).add(target);
+    camera.up.set(0, 1, 0).applyQuaternion(quat);
+    camera.quaternion.copy(quat);
+    camera.zoom = c[4];
+    camera.updateProjectionMatrix();
+    controls.update();
+  }
+  if (q.get('play') === '1') startPipeline();
+  return true;
+}
+
+let hashTimer = 0;
+function syncHash() {
+  if (LOGO || !model) return;
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => history.replaceState(null, '', '#' + stateToHash()), 250);
+}
+controls.addEventListener('end', syncHash);
+$('share').addEventListener('click', async () => {
+  history.replaceState(null, '', '#' + stateToHash());
+  const url = location.href, field = $('share-url');
+  let copied = false;
+  try {
+    // the permission request can stay pending: give up after a moment
+    await Promise.race([navigator.clipboard.writeText(url),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('clipboard timeout')), 1500))]);
+    copied = true;
+  } catch (e) {
+    // older browsers, or no clipboard permission (e.g. file://): copy from a selected field
+    field.value = url;
+    field.hidden = false;
+    field.select();
+    try { copied = document.execCommand('copy'); } catch (e2) { copied = false; }
+  }
+  field.hidden = copied;
+  $('share').textContent = copied ? 'Link copied ✓' : 'Copy the link below';
+  setTimeout(() => { $('share').textContent = 'Copy link'; }, 1800);
+});
 
 /* ---------- Main loop ---------- */
 let last = performance.now();
@@ -1064,10 +1260,13 @@ if (LOGO) {
   window.logoFrame(0.5);
   document.body.dataset.ready = '1';
 } else {
-  $('dict').value = 0;
-  syncJointSliders();
-  showGestures();
-  update(true);
+  if (!applyHash()) {
+    $('dict').value = 0;
+    syncJointSliders();
+    showGestures();
+    update(true);
+  }
+  window.addEventListener('hashchange', applyHash);
   requestAnimationFrame(loop);
 }
 </script>

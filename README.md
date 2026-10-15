@@ -29,8 +29,16 @@ needs an internet connection.
 - **Four render modes**: **Skeleton** (bones, joints and seed points),
   **Volume** (a ball on every seed point), **Voxels** (the dilated voxel
   grid) and **Depth** (the 144×176 image). Keys `1`–`4` switch between them.
+  Rotate the hand freely in any direction; Depth shows the image the
+  generator renders from that same point of view.
+- **Voxel grid** 1× is the generator's grid, one voxel per depth-image pixel.
+  2×–4× rebuild the same volume on a finer grid, for a smoother look.
 - **Every gesture** of the five dictionaries, with sliders for the hand
   profile (scale, FP-AR, PW), the point of view and all 21 joint angles.
+- **Copy link** shares exactly what is on screen: the gesture, render mode,
+  profile, point of view, edited joints, voxel grid and camera. A link copied
+  while the pipeline is playing opens with the animation playing. For example,
+  [the 'I love you' sign as voxels](https://javimol.github.io/synthetic-hands-generator/viewer/hand-viewer.html#g=101&m=voxels&r=3).
 - **Play the pipeline**, the animation at the top of this page.
 - **Save depth PNG** writes the depth image with its stored values.
 
