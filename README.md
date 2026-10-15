@@ -18,9 +18,6 @@ synthetic data alone and then evaluate them on recordings of real people.
 gesture, change the hand and the point of view, and watch it become a depth
 image. Nothing to install.
 
-> **Status:** research code from 2009–2013, cleaned up and published for
-> reference. It is not actively developed.
-
 ## Interactive viewer
 
 [viewer/hand-viewer.html](viewer/hand-viewer.html) is the same model in the
