@@ -1,7 +1,7 @@
 # Synthetic hands generator
 
 <p align="center">
-  <img src="docs/img/logo.gif" width="360" alt="A hand making the 'I love you' sign, built step by step: the skeleton, its seed points, the dilated volume and the depth image">
+  <a href="https://javimol.github.io/synthetic-hands-generator/viewer/hand-viewer.html"><img src="docs/img/logo.gif" width="360" alt="A hand making the 'I love you' sign, built step by step: the skeleton, its seed points, the dilated volume and the depth image. Click to open the interactive viewer."></a>
 </p>
 
 Generates synthetic **depth images of human hand postures** from a 27-DOF
@@ -14,15 +14,20 @@ Range Data* (Javier Molina Vela, Universidad Autónoma de Madrid, 2012),
 Sections 2.2 and 3.2. The thesis used it to train gesture classifiers on
 synthetic data alone and then evaluate them on recordings of real people.
 
+**[▶ Open the interactive viewer](https://javimol.github.io/synthetic-hands-generator/viewer/hand-viewer.html)** in your browser: pick any
+gesture, change the hand and the point of view, and watch it become a depth
+image. Nothing to install.
+
 > **Status:** research code from 2009–2013, cleaned up and published for
 > reference. It is not actively developed.
 
 ## Interactive viewer
 
 [viewer/hand-viewer.html](viewer/hand-viewer.html) is the same model in the
-browser: a single file with the whole posture dictionary embedded. Download it
-and open it in a browser. It loads three.js from a CDN, so it needs an
-internet connection.
+browser: a single file with the whole posture dictionary embedded. It is
+published with GitHub Pages: **[open the viewer](https://javimol.github.io/synthetic-hands-generator/viewer/hand-viewer.html)**. You can also
+download the file and open it locally. It loads three.js from a CDN, so it
+needs an internet connection.
 
 - **Four render modes**: **Skeleton** (bones, joints and seed points),
   **Volume** (a ball on every seed point), **Voxels** (the dilated voxel
@@ -36,7 +41,7 @@ The JavaScript port renders pixel-identical depth images to the Octave code.
 `tests/viewer_test.mjs` checks every posture under three profiles and points
 of view. The animation is recorded with `viewer/tools/record_logo.mjs`.
 
-![The viewer, in Skeleton mode](docs/img/viewer.png)
+[![The viewer, in Skeleton mode. Click to open it.](docs/img/viewer.png)](https://javimol.github.io/synthetic-hands-generator/viewer/hand-viewer.html)
 
 ## How it works
 
