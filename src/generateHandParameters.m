@@ -7,12 +7,13 @@ function [p,pplain] =generateHandParameters(semanticData)
 %
 %   Posture ids:
 %     1-8      One, Two, Three, Four, Five, Ok, Stop, Fist
-%     11, 12   additional postures
-%     101-104  miscellaneous postures
+%     11, 12   OkLeft, OkRight (with 1-5, 7 and 8: Molina et al. 2011)
+%     101-104  miscellaneous postures m1-m4
 %     201-205  Soutschek et al. (2008): 201 = Stop (as 7), 202 = Jedi,
 %              203 = Two (as 2), 204 = Fist (as 8), 205 = Ok, palm right
-%     301-312  Kollorz et al. (2008), 12 postures
-%     401-427  Spanish Sign Language alphabet, static letters a-z
+%     301-312  Kollorz et al. (2008), postures A-L
+%     401-427  Spanish Sign Language alphabet a-z in order, with n-tilde:
+%              401 = a, 414 = n, 415 = n-tilde, 427 = z
 %
 %   Parameters (radians, translation in voxels):
 %     phi1_x, phi1_y, phi1_z, T1_x, T1_y, T1_z   global rotation and position
@@ -506,7 +507,7 @@ for i=1:length(semanticData)
             pLocal.phiR2_x= pi/2;pLocal.phiR2_z= 0;pLocal.phiR3_x= pi/2;pLocal.phiR4_x= pi/2;
             %Little
             pLocal.phiL2_x= pi/2;pLocal.phiL2_z= 0;pLocal.phiL3_x=pi/2;pLocal.phiL4_x= pi/2;
-         case {408}%g
+         case {408}%h
             %Global
             pLocal.phi1_x= 0; pLocal.phi1_y= pi;pLocal.phi1_z= pi/4; pLocal.T1_x= 0;pLocal.T1_y= 0;pLocal.T1_z= 0;
             %Thumb
@@ -519,7 +520,7 @@ for i=1:length(semanticData)
             pLocal.phiR2_x= pi/2;pLocal.phiR2_z= 0;pLocal.phiR3_x= pi/2;pLocal.phiR4_x= pi/2;
             %Little
             pLocal.phiL2_x= pi/2;pLocal.phiL2_z= 0;pLocal.phiL3_x=pi/2;pLocal.phiL4_x= pi/2;
-         case {409}%h
+         case {409}%i
             %Global
             pLocal.phi1_x= 0; pLocal.phi1_y= pi/4;pLocal.phi1_z= 0; pLocal.T1_x= 0;pLocal.T1_y= 0;pLocal.T1_z= 0;
             %Thumb
@@ -532,7 +533,7 @@ for i=1:length(semanticData)
             pLocal.phiR2_x= pi/2;pLocal.phiR2_z= 0;pLocal.phiR3_x= pi/2;pLocal.phiR4_x= pi/2;
             %Little
             pLocal.phiL2_x= 0;pLocal.phiL2_z= 0;pLocal.phiL3_x=0;pLocal.phiL4_x= 0;
-         case {410}%i
+         case {410}%j
             %Global
             pLocal.phi1_x= 0; pLocal.phi1_y= pi;pLocal.phi1_z= 0; pLocal.T1_x= 0;pLocal.T1_y= 0;pLocal.T1_z= 0;
             %Thumb
@@ -545,7 +546,7 @@ for i=1:length(semanticData)
             pLocal.phiR2_x= pi/2;pLocal.phiR2_z= 0;pLocal.phiR3_x= pi/2;pLocal.phiR4_x= pi/2;
             %Little
             pLocal.phiL2_x= 0;pLocal.phiL2_z= 0;pLocal.phiL3_x=0;pLocal.phiL4_x= 0;
-         case {411}%j
+         case {411}%k
             %Global
             pLocal.phi1_x= 0; pLocal.phi1_y= pi/4;pLocal.phi1_z= 0; pLocal.T1_x= 0;pLocal.T1_y= 0;pLocal.T1_z= 0;
             %Thumb
@@ -558,7 +559,7 @@ for i=1:length(semanticData)
             pLocal.phiR2_x= pi/2;pLocal.phiR2_z= 0;pLocal.phiR3_x= pi/2;pLocal.phiR4_x= pi/2;
             %Little
             pLocal.phiL2_x= pi/2;pLocal.phiL2_z= 0;pLocal.phiL3_x=pi/2;pLocal.phiL4_x= pi/2;
-         case {412}%k
+         case {412}%l
              %Global
             pLocal.phi1_x= 0; pLocal.phi1_y= 0;pLocal.phi1_z=0 ; pLocal.T1_x= 0;pLocal.T1_y= 0;pLocal.T1_z= 0;
             %Thumb
@@ -571,7 +572,7 @@ for i=1:length(semanticData)
             pLocal.phiR2_x= pi/2;pLocal.phiR2_z= 0;pLocal.phiR3_x= pi/2;pLocal.phiR4_x= pi/2;
             %Little
             pLocal.phiL2_x= pi/2;pLocal.phiL2_z= 0;pLocal.phiL3_x=pi/2;pLocal.phiL4_x= pi/2;
-         case {413}%l
+         case {413}%m
             %Global
             pLocal.phi1_x= pi; pLocal.phi1_y= 0;pLocal.phi1_z= 0; pLocal.T1_x= 0;pLocal.T1_y= 0;pLocal.T1_z= 0;
             %Thumb
@@ -584,7 +585,7 @@ for i=1:length(semanticData)
             pLocal.phiR2_x= 0;pLocal.phiR2_z= 0;pLocal.phiR3_x= 0;pLocal.phiR4_x= 0;
             %Little
             pLocal.phiL2_x= pi/2;pLocal.phiL2_z= 0;pLocal.phiL3_x=pi/2;pLocal.phiL4_x= pi/2;
-        case {414,415}%m
+        case {414,415}%n, n-tilde
             %Global
             pLocal.phi1_x= pi; pLocal.phi1_y= 0;pLocal.phi1_z= 0; pLocal.T1_x= 0;pLocal.T1_y= 0;pLocal.T1_z= 0;
            %Thumb
@@ -675,7 +676,7 @@ for i=1:length(semanticData)
             pLocal.phiR2_x= 0;pLocal.phiR2_z= pi/32;pLocal.phiR3_x= 0;pLocal.phiR4_x= 0;
             %Little
             pLocal.phiL2_x= 0;pLocal.phiL2_z= pi/20;pLocal.phiL3_x=0;pLocal.phiL4_x= 0;            
-        case 424
+        case 424%w
            	%Global
             pLocal.phi1_x= 0; pLocal.phi1_y= 0;pLocal.phi1_z= 0; pLocal.T1_x= 0;pLocal.T1_y= 0;pLocal.T1_z= 0;
             %Thumb
@@ -688,7 +689,7 @@ for i=1:length(semanticData)
             pLocal.phiR2_x= 0;pLocal.phiR2_z= pi/32;pLocal.phiR3_x= 0;pLocal.phiR4_x= 0;
              %Little
             pLocal.phiL2_x= pi/2;pLocal.phiL2_z= 0;pLocal.phiL3_x=pi/2;pLocal.phiL4_x= pi/2;
-        case {425}%t
+        case {425}%x
           %Global
             pLocal.phi1_x= 0; pLocal.phi1_y= pi/4;pLocal.phi1_z= 0; pLocal.T1_x= 0;pLocal.T1_y= 0;pLocal.T1_z= 0;
             %Thumb

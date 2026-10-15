@@ -21,7 +21,8 @@ function make_dataset(preset, varargin)
 %     'ViewGrid'          {dx, dy, dz}: use every combination of these
 %                         rotations instead of random views
 %     'NoiseSNR'          if set, add Gaussian noise of this power (dBW) to
-%                         the joint angles
+%                         the joint angles and clamp them to the joint
+%                         limits (see checkRestrictions)
 %     'NoisySamples'      noisy copies per view (default 1)
 %     'Seed'              random seed (default 0)
 %     'OutputDir'         default output/<preset>
@@ -75,7 +76,6 @@ fprintf(fid, '%s\n', strjoin([{'file','profile','posture','scale', ...
 
 profiles = generateUserProfiles(opts.Scales, opts.FingerPalmRatios, opts.PalmWidths);
 [~, poses] = generateHandParameters(opts.Postures);
-poses = checkRestrictions(poses);
 n = 0;
 for iProf = 1:numel(profiles)
     for iPose = 1:numel(opts.Postures)
