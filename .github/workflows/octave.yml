@@ -1,0 +1,12 @@
+name: octave
+
+on: [push, pull_request]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    container: gnuoctave/octave:9.2.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke test
+        run: octave --no-gui --eval "run('tests/smoke_test.m')"

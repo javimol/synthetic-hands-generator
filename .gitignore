@@ -1,0 +1,10 @@
+# generated output
+output/
+syn_*/
+synImages_*/
+VIDEOS_*/
+pBestplain.dat
+# editor / MATLAB artefacts
+*.asv
+*.m~
+octave-workspace
