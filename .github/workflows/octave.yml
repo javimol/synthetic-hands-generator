@@ -10,3 +10,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Smoke test
         run: octave --no-gui --eval "run('tests/smoke_test.m')"
+
+  viewer-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Reference images from Octave
+        run: docker run --rm -u $(id -u):$(id -g) -v "$PWD":/repo -w /repo gnuoctave/octave:9.2.0 octave --no-gui --eval "run('tests/export_viewer_reference.m')"
+      - name: Viewer renders the same images
+        run: node tests/viewer_test.mjs

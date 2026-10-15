@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Synthetic Hands</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;1,400&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-height stage with a narrow control panel (left on desktop, below on phones). */
+:root {
+  --paper: #f1efec;      /* panel ground, warm grey */
+  --ink: #23201d;        /* text */
+  --muted: #6b645d;      /* secondary text */
+  --rule: #d6d0c9;       /* hairlines, control borders */
+  --accent: #c2501c;     /* active controls, joints */
+  --accent-ink: #fbf6f2; /* text on accent */
+  --stage: #0d0f12;      /* 3D background: the depth camera sees black */
+  --stage-ink: #e9e4de;  /* HUD text over the stage */
+  --font-display: "Spectral", Georgia, "Times New Roman", serif;
+  --font-body: "Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #18171a; --ink: #e8e3dd; --muted: #a39b93; --rule: #34313a;
+    --accent: #ec7a43; --accent-ink: #1a0d06; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #18171a; --ink: #e8e3dd; --muted: #a39b93; --rule: #34313a;
+  --accent: #ec7a43; --accent-ink: #1a0d06; color-scheme: dark;
+}
+
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: 14px/1.5 var(--font-body);
+}
+.app { display: grid; grid-template-columns: 320px 1fr; height: 100%; }
+.panel {
+  display: flex; flex-direction: column; gap: 20px;
+  padding: 24px 20px; border-right: 1px solid var(--rule);
+  overflow-y: auto; min-width: 0;
+}
+.stage { position: relative; min-width: 0; min-height: 0; background: var(--stage); overflow: hidden; }
+.stage canvas.gl { display: block; width: 100%; height: 100%; touch-action: none; }
+
+h1 { margin: 0; font: 500 28px/1.1 var(--font-display); letter-spacing: -0.01em; }
+.sub { margin: 6px 0 0; color: var(--muted); font-style: italic; font-family: var(--font-display); font-size: 15px; }
+
+.group { display: flex; flex-direction: column; gap: 8px; }
+.label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.seg button {
+  all: unset; cursor: pointer; text-align: center; padding: 6px 2px; font-size: 12.5px;
+  border-left: 1px solid var(--rule);
+}
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+select {
+  font: inherit; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chips button {
+  all: unset; cursor: pointer; box-sizing: border-box; min-width: 2.4em; text-align: center;
+  padding: 3px 7px; border: 1px solid var(--rule); border-radius: 4px; font-size: 12.5px;
+}
+.chips button:hover { border-color: var(--accent); }
+.chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.slider { display: grid; grid-template-columns: 5.2em 1fr 3.6em; align-items: center; gap: 8px; font-size: 12.5px; }
+.slider span:first-child { font-family: var(--font-data); font-size: 11.5px; }
+.slider output { font-family: var(--font-data); font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--accent); min-width: 0; margin: 0; }
+.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.check input { accent-color: var(--accent); }
+.buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn {
+  all: unset; cursor: pointer; padding: 5px 10px; border: 1px solid var(--rule); border-radius: 6px;
+  font-size: 12.5px;
+}
+.btn:hover { border-color: var(--accent); }
+.seg button:focus-visible, .chips button:focus-visible, .btn:focus-visible, select:focus-visible,
+input[type=range]:focus-visible, .check input:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+details { border-top: 1px solid var(--rule); padding-top: 12px; }
+summary { cursor: pointer; }
+details .group { margin-top: 10px; }
+.finger { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+.credit { margin-top: auto; font-size: 12px; color: var(--muted); }
+.credit a { color: inherit; }
+
+.hud {
+  position: absolute; left: 14px; bottom: 12px; right: 14px; pointer-events: none;
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  font-family: var(--font-data); font-size: 11.5px; color: var(--stage-ink); opacity: 0.8;
+}
+.depth-view {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 24px 24px 48px;
+}
+.depth-view canvas {
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  max-width: 100%; max-height: 100%; aspect-ratio: 176 / 144; width: min(100%, 880px);
+  outline: 1px solid #2a2e35; cursor: crosshair;
+}
+.caption {
+  position: absolute; left: 0; right: 0; bottom: 7%; text-align: center; pointer-events: none;
+  font-family: var(--font-data); font-size: 15px; letter-spacing: 0.06em; color: var(--stage-ink);
+}
+.caption b { color: #ec7a43; font-weight: 500; }
+
+/* ?logo: a bare square stage for recording the README animation */
+body.logo .panel, body.logo .hud { display: none; }
+body.logo .app { display: block; }
+body.logo .stage { width: var(--logo-size, 360px); height: var(--logo-size, 360px); }
+
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: 58vh auto; height: auto; }
+  .stage { order: -1; height: 58vh; }
+  .panel { border-right: 0; border-top: 1px solid var(--rule); padding: 20px 16px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <header>
+      <h1>Synthetic hands</h1>
+      <p class="sub">27-DOF hand model to depth image, UAM 2009–2013</p>
+    </header>
+
+    <div class="group">
+      <span class="label" id="mode-label">Render</span>
+      <div class="seg" id="mode" role="group" aria-labelledby="mode-label">
+        <button type="button" data-mode="skeleton" title="Key 1">Skeleton</button>
+        <button type="button" data-mode="volume" title="Key 2">Volume</button>
+        <button type="button" data-mode="voxels" title="Key 3">Voxels</button>
+        <button type="button" data-mode="depth" title="Key 4">Depth</button>
+      </div>
+      <div class="buttons">
+        <button type="button" class="btn" id="play">▶ Play the pipeline</button>
+        <button type="button" class="btn" id="save" hidden>Save depth PNG</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="label" for="dict">Gesture</label>
+      <select id="dict"></select>
+      <div class="chips" id="gestures" role="group" aria-label="Gestures"></div>
+    </div>
+
+    <div class="group">
+      <span class="label">Hand profile</span>
+      <div id="profile"></div>
+    </div>
+
+    <div class="group">
+      <span class="label">Point of view</span>
+      <div id="view"></div>
+      <div class="buttons">
+        <button type="button" class="btn" id="random-view">Random view</button>
+        <button type="button" class="btn" id="front-view">Frontal</button>
+      </div>
+    </div>
+
+    <details>
+      <summary class="label">Joint angles</summary>
+      <div class="group" id="joints"></div>
+      <div class="buttons" style="margin-top:10px">
+        <button type="button" class="btn" id="reset-joints">Reset to gesture</button>
+      </div>
+    </details>
+
+    <div class="group">
+      <label class="check"><input type="checkbox" id="spin"> Rotate slowly</label>
+      <label class="check"><input type="checkbox" id="seeds" checked> Seed points in skeleton view</label>
+    </div>
+
+    <p class="credit">Javier Molina Vela. Drag to orbit, scroll or pinch to zoom, right-drag to pan. Keys 1–4 switch the render mode.
+      <a href="https://github.com/javimol/synthetic-hands-generator">Source and method</a>.</p>
+  </aside>
+
+  <main class="stage" id="stage">
+    <div class="depth-view" id="depth-view" hidden><canvas id="depth" width="176" height="144" aria-label="Depth image"></canvas></div>
+    <div class="caption" id="caption" hidden></div>
+    <div class="hud"><span id="hud-left"></span><span id="hud-right"></span></div>
+  </main>
+</div>
+
+<script id="postures" type="application/json">/*POSTURES*/[{"name":"Molina et al. 2011","postures":[
+{"id":1,"name":"Enum1","p":[0,0,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":2,"name":"Enum2","p":[0,0,0,0,0,0,0.78539816339744828,0,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0.26179938779914941,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":3,"name":"Enum3","p":[0,0,0,0,0,0,0,-0.78539816339744828,0,0,0,0,0,0,0,0,0.26179938779914941,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":4,"name":"Enum4","p":[0,0,0,0,0,0,0.78539816339744828,0.19634954084936207,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0,0,0,0,0.098174770424681035,0,0,0,0.15707963267948966,0,0]},
+{"id":5,"name":"Enum5","p":[0,0,0,0,0,0,0,-0.78539816339744828,0,0,0,0,0,0,0,0,0,0,0,0,0.098174770424681035,0,0,0,0.15707963267948966,0,0]},
+{"id":7,"name":"Stop","p":[0,0,0,0,0,0,0,-0.78539816339744828,0,0.78539816339744828,0,0,0.17453292519943295,0,0,0,-0,0,0,0,-0.17453292519943295,0,0,0,-0.3490658503988659,0,0]},
+{"id":8,"name":"Fist","p":[1.5707963267948966,0,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":11,"name":"OkLeft","p":[1.5707963267948966,0,0,0,0,0,0,-0.78539816339744828,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":12,"name":"OkRight","p":[1.5707963267948966,3.1415926535897931,0,0,0,0,0,-0.78539816339744828,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":6,"name":"Ok","p":[1.5707963267948966,1.5707963267948966,0,0,0,0,0,-0.78539816339744828,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]}]},
+{"name":"Kollorz et al. 2008","postures":[
+{"id":301,"name":"A","p":[0,3.1415926535897931,0,0,0,0,0,-0.78539816339744828,0,0.78539816339744828,0,0,0.17453292519943295,0,0,0,-0,0,0,0,-0.17453292519943295,0,0,0,-0.3490658503988659,0,0]},
+{"id":302,"name":"B","p":[0,3.1415926535897931,0,0,0,0,0.78539816339744828,0,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0.26179938779914941,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":303,"name":"C","p":[0,1.5707963267948966,0,0,0,0,1.0471975511965976,0,0,0.52359877559829882,0,0,0.17453292519943295,1.0471975511965976,0.52359877559829882,0,-0,1.0471975511965976,0.52359877559829882,0,-0.17453292519943295,1.0471975511965976,0.52359877559829882,0,-0.3490658503988659,0.26179938779914941,0.26179938779914941]},
+{"id":304,"name":"D","p":[0,3.1415926535897931,0,0,0,0,0,-1.0471975511965976,0,-0.39269908169872414,0,0,0.17453292519943295,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":305,"name":"E","p":[0,3.1415926535897931,0,0,0,0,0,-0.78539816339744828,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":306,"name":"F","p":[0,0,0,0,0,0,0,-0.78539816339744828,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":307,"name":"G","p":[0,3.1415926535897931,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":308,"name":"H","p":[0,3.1415926535897931,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0,0.17453292519943295,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":309,"name":"I","p":[0,1.5707963267948966,0,0,0,0,0,-0.78539816339744828,0,0.78539816339744828,0,0,0.17453292519943295,0,0,0,-0,0,0,0,-0.17453292519943295,0,0,0,-0.3490658503988659,0,0]},
+{"id":310,"name":"J","p":[0,3.1415926535897931,0,0,0,0,0,-0.39269908169872414,0,0.39269908169872414,0,0,0.17453292519943295,0,0,0,-0,0,0,0,-0.17453292519943295,0,0,0,-0.3490658503988659,0,0]},
+{"id":311,"name":"K","p":[0,3.1415926535897931,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":312,"name":"L","p":[2.3561944901923448,1.5707963267948966,0,0,0,0,0,-0.78539816339744828,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]}]},
+{"name":"Soutschek et al. 2008","postures":[
+{"id":201,"name":"a (Stop)","p":[0,0,0,0,0,0,0,-0.78539816339744828,0,0.78539816339744828,0,0,0.17453292519943295,0,0,0,-0,0,0,0,-0.17453292519943295,0,0,0,-0.3490658503988659,0,0]},
+{"id":202,"name":"b (Jedi)","p":[0,0,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0,0.17453292519943295,0,0,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":203,"name":"c (Two)","p":[0,0,0,0,0,0,0.78539816339744828,0,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0.26179938779914941,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":204,"name":"d (Fist)","p":[1.5707963267948966,0,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":205,"name":"e (Ok)","p":[0,0,0,0,0,0,0,-0.78539816339744828,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]}]},
+{"name":"Miscellaneous","postures":[
+{"id":101,"name":"m1","p":[0,0,0,0,0,0,0,-0.78539816339744828,0,0,0,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,0,0.15707963267948966,0,0]},
+{"id":102,"name":"m2","p":[0,3.1415926535897931,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":103,"name":"m3","p":[1.5707963267948966,1.5707963267948966,0,0,0,0,0,-0.78539816339744828,0,0,0,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":104,"name":"m4","p":[1.5707963267948966,1.5707963267948966,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]}]},
+{"name":"Spanish Sign Language","postures":[
+{"id":401,"name":"a","p":[0,0,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":402,"name":"b","p":[0,3.1415926535897931,1.5707963267948966,0,0,0,0,-0.78539816339744828,0,0.78539816339744828,0,0,0.17453292519943295,0,0,0,-0,0,0,0,-0.17453292519943295,0,0,0,-0.3490658503988659,0,0]},
+{"id":403,"name":"c","p":[0,1.5707963267948966,0,0,0,0,1.0471975511965976,0,0,0.52359877559829882,0,0,0.17453292519943295,1.0471975511965976,0.52359877559829882,0,-0,1.0471975511965976,0.52359877559829882,0,-0.17453292519943295,1.0471975511965976,0.52359877559829882,0,-0.3490658503988659,0.26179938779914941,0.26179938779914941]},
+{"id":404,"name":"d","p":[0,0.78539816339744828,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0,0,0,0,1.1780972450961724,0,0.78539816339744828,0.78539816339744828,1.1780972450961724,0,0.78539816339744828,0.78539816339744828,0.39269908169872414,0,0.39269908169872414,1.5707963267948966]},
+{"id":405,"name":"e","p":[0,0,0,0,0,0,0,-0.78539816339744828,0,0,0,0,0.17453292519943295,1.5707963267948966,1.5707963267948966,0,-0,1.5707963267948966,1.5707963267948966,0,-0.17453292519943295,1.5707963267948966,1.5707963267948966,0,-0.3490658503988659,1.5707963267948966,1.5707963267948966]},
+{"id":406,"name":"f","p":[0,0.78539816339744828,0,0,0,0,0.58904862254808621,-0.39269908169872414,0,0.39269908169872414,0.78539816339744828,1.5707963267948966,0,0,0,0,0,0,0,0,0.098174770424681035,0,0,0,0.15707963267948966,0,0]},
+{"id":407,"name":"g","p":[0,-3.1415926535897931,1.5707963267948966,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":408,"name":"h","p":[0,3.1415926535897931,0.78539816339744828,0,0,0,0,-0.78539816339744828,0,0,0,0,0,0,0,0,0.26179938779914941,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":409,"name":"i","p":[0,0.78539816339744828,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,0,0,0,0]},
+{"id":410,"name":"j","p":[0,3.1415926535897931,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,0,0,0,0]},
+{"id":411,"name":"k","p":[0,0.78539816339744828,0,0,0,0,0.39269908169872414,-0.39269908169872414,0,0.39269908169872414,0.78539816339744828,0,0,0,0,1.5707963267948966,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":412,"name":"l","p":[0,0,0,0,0,0,0,-0.78539816339744828,0,-0.58904862254808621,0,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":413,"name":"m","p":[3.1415926535897931,0,0,0,0,0,0.78539816339744828,0,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0,0,0,0,0,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":414,"name":"n","p":[3.1415926535897931,0,0,0,0,0,0.78539816339744828,0,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0.26179938779914941,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":415,"name":"ñ","p":[3.1415926535897931,0,0,0,0,0,0.78539816339744828,0,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0.26179938779914941,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":416,"name":"o","p":[0,1.5707963267948966,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.39269908169872414,0.78539816339744828,0,1.1780972450961724,0.39269908169872414,0.78539816339744828,0,1.1780972450961724,0.39269908169872414,0.78539816339744828,0,1.1780972450961724,0.39269908169872414,0.39269908169872414,0,0.39269908169872414,0.78539816339744828]},
+{"id":417,"name":"p","p":[0,0,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0,0.17453292519943295,0,0,0,-0,0,0,0,-0.17453292519943295,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":418,"name":"q","p":[1.5707963267948966,3.1415926535897931,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.39269908169872414,0.78539816339744828,0,1.1780972450961724,0.39269908169872414,0.78539816339744828,0,1.1780972450961724,0.39269908169872414,0.78539816339744828,0.098174770424681035,1.1780972450961724,0.39269908169872414,0.78539816339744828,0.15707963267948966,1.1780972450961724,0.39269908169872414]},
+{"id":419,"name":"r","p":[0,0,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0.26179938779914941,0.52359877559829882,0,0,0,-0,0,0,1.5707963267948966,-0.17453292519943295,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":420,"name":"s","p":[0,1.1780972450961724,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0,0,0,1.1780972450961724,-0.39269908169872414,1.1780972450961724,0,0,0.15707963267948966,0,0]},
+{"id":421,"name":"t","p":[0,1.1780972450961724,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.1780972450961724,0,1.1780972450961724,0,0,0,0,0,0,0.098174770424681035,0,0,0,0.15707963267948966,0,0]},
+{"id":422,"name":"u","p":[0,0,0,0,0,0,0.78539816339744828,0,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0.26179938779914941,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":423,"name":"v","p":[0,0,0,0,0,0,0.78539816339744828,0,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0.26179938779914941,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":424,"name":"w","p":[0,0,0,0,0,0,0.78539816339744828,0.19634954084936207,0,0.78539816339744828,0.78539816339744828,0,0,0,0,0,0,0,0,0,0.098174770424681035,0,0,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":425,"name":"x","p":[0,0.78539816339744828,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,0,0.26179938779914941,0.78539816339744828,0.39269908169872414,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966]},
+{"id":426,"name":"y","p":[0,0,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,0.39269908169872414,0,0.78539816339744828,0.39269908169872414]},
+{"id":427,"name":"z","p":[0,0,0,0,0,0,0.78539816339744828,-0.39269908169872414,0,0.78539816339744828,0.78539816339744828,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,1.5707963267948966,0,1.5707963267948966,1.5707963267948966,0,0,0,0]}]}]/*END POSTURES*/</script>
+
+<script id="hand-model">
+// Port of the MATLAB generator (src/). Pure functions, no DOM: tests/viewer_test.mjs
+// runs this block in Node and compares the depth images with the Octave ones.
+const HandModel = (() => {
+  const LX = 144, LY = 176, LZ = 256;   // voxel grid: image rows, image columns, depth
+  const PARAMS = ['phi1_x', 'phi1_y', 'phi1_z', 'T1_x', 'T1_y', 'T1_z',
+    'phiT1_x', 'phiT1_z', 'phiT2_x', 'phiT2_z', 'phiT3_z',
+    'phiI2_x', 'phiI2_z', 'phiI3_x', 'phiI4_x', 'phiM2_x', 'phiM2_z', 'phiM3_x', 'phiM4_x',
+    'phiR2_x', 'phiR2_z', 'phiR3_x', 'phiR4_x', 'phiL2_x', 'phiL2_z', 'phiL3_x', 'phiL4_x'];
+
+  // generateUserProfiles
+  function profile(scale = 3, fp = 1, pw = 4) {
+    const s = scale, step = 0.25 * pw;
+    return {
+      scale: s, fingerPalmRatio: fp, palmWidth: pw,
+      splay: { I: -Math.PI / 18, M: 0, R: Math.PI / 18, L: Math.PI / 9 },
+      palmLength: 6 * s, thumbPalmLength: 4 * s, littlePalmLength: 3 * s,
+      proximalLength: fp * 3 * s, thumbProximalLength: fp * 3 * s, tipSegmentLength: fp * 2 * s,
+      fillSpacing: s / 2,
+      base: { T: [2 * step * s, step * s, 0], I: [step * s, step * s, 0], M: [0, step * s, 0],
+              R: [-step * s, step * s, 0], L: [-2 * step * s, step * s, 0] },
+    };
+  }
+
+  // Fused multiply-add (Dekker products). Octave's BLAS multiplies matrices with FMA, and
+  // the fill-point counts, ceil(L / spacing), are often exact integers: without it a few
+  // segments get one point more or less and the images differ by a few pixels.
+  const SPLIT = 134217729;   // 2^27 + 1
+  function fma(a, b, c) {
+    const p = a * b;
+    const ca = SPLIT * a, ah = ca - (ca - a), al = a - ah;
+    const cb = SPLIT * b, bh = cb - (cb - b), bl = b - bh;
+    const e = ((ah * bh - p) + ah * bl + al * bh) + al * bl;
+    const s = p + c, bb = s - p, t = (p - (s - bb)) + (c - bb);
+    return s + (t + e);
+  }
+
+  // 4x4 matrices, row-major, acting on column vectors as in the MATLAB code
+  function mul(A, B) {
+    const C = new Array(16);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      let v = A[i * 4] * B[j];
+      for (let k = 1; k < 4; k++) v = fma(A[i * 4 + k], B[k * 4 + j], v);
+      C[i * 4 + j] = v;
+    }
+    return C;
+  }
+  const T = (x, y, z) => [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z, 0, 0, 0, 1];
+  function R(px, py, pz) {   // rotationMatrix: Rx(px) * Ry(py) * Rz(pz)
+    const cx = Math.cos(px), sx = Math.sin(px), cy = Math.cos(py), sy = Math.sin(py);
+    const cz = Math.cos(pz), sz = Math.sin(pz);
+    const Rx = [1, 0, 0, 0, 0, cx, -sx, 0, 0, sx, cx, 0, 0, 0, 0, 1];
+    const Ry = [cy, 0, sy, 0, 0, 1, 0, 0, -sy, 0, cy, 0, 0, 0, 0, 1];
+    const Rz = [cz, -sz, 0, 0, sz, cz, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    return mul(mul(Rx, Ry), Rz);
+  }
+  const chain = (...Ms) => Ms.reduce(mul);
+  const apply = (M, p) => [0, 1, 2].map(i => M[i * 4] * p[0] + M[i * 4 + 1] * p[1] + M[i * 4 + 2] * p[2] + M[i * 4 + 3]);
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const half = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  // sqrt(sum(v.^2)) as in MATLAB: Math.hypot rounds differently, and ceil(L / spacing) is often an exact integer
+  const dist = (a, b) => { const x = b[0] - a[0], y = b[1] - a[1], z = b[2] - a[2]; return Math.sqrt(x * x + y * y + z * z); };
+
+  // interpolPoints: nPoints points strictly inside the segment, then r2
+  function interpolate(r1, r2, n) {
+    if (n <= 1) return [r2];
+    const v = [r2[0] - r1[0], r2[1] - r1[1], r2[2] - r1[2]];
+    const L = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    const u = v.map(c => c / L), res = L / (n - 1 + 2), out = [];
+    for (let i = 0; i < n; i++) {
+      const s = res + i * res;
+      out.push([r1[0] + s * u[0], r1[1] + s * u[1], r1[2] + s * u[2]]);
+    }
+    out.push(r2);
+    return out;
+  }
+
+  // calculatePoints: joints by level, fill points, palm points
+  function skeleton(p, prof) {
+    const o = [0, 0, 0], tip = [0, prof.tipSegmentLength, 0];
+    const T0 = mul(T(p.T1_x, p.T1_y, p.T1_z), R(p.phi1_x, p.phi1_y, p.phi1_z));
+    const M = {};
+    const b = prof.base;
+    M.T1 = mul(T(...b.T), R(p.phiT1_x, 0, p.phiT1_z));
+    M.T2 = mul(T(0, prof.thumbPalmLength, 0), R(p.phiT2_x, 0, p.phiT2_z));
+    M.T3 = mul(T(0, prof.thumbProximalLength, 0), R(0, 0, p.phiT3_z));
+    for (const f of 'IMRL') {
+      M[f + 1] = mul(T(...b[f]), R(0, 0, prof.splay[f]));
+      const palm = f === 'L' ? prof.littlePalmLength : prof.palmLength;
+      M[f + 2] = mul(T(0, palm, 0), R(p['phi' + f + '2_x'], 0, p['phi' + f + '2_z']));
+      M[f + 3] = mul(T(0, prof.proximalLength, 0), R(p['phi' + f + '3_x'], 0, 0));
+      M[f + 4] = mul(T(0, prof.tipSegmentLength, 0), R(p['phi' + f + '4_x'], 0, 0));
+    }
+    const F = 'TIMRL';
+    const at = (f, lv, pt = o) => apply(chain(T0, ...Array.from({ length: lv }, (_, i) => M[f + (i + 1)])), pt);
+    const wrist = apply(T0, o);
+    const r1 = [...F].map(f => at(f, 1));
+    const r2 = [...F].map(f => at(f, 2));
+    const r3 = [...F].map(f => at(f, 3));
+    const r4 = [at('T', 3, tip), ...[...'IMRL'].map(f => at(f, 4))];
+    const r5 = [...'IMRL'].map(f => at(f, 4, tip));
+    const palm = (r, third) => {
+      const [t, i, m, rr, l] = r, ti = half(t, i), tx = half(t, third);
+      return [half(t, ti), ti, half(ti, i), half(i, m), half(m, rr), half(rr, l),
+              half(t, tx), tx, half(tx, third)];
+    };
+    const fill1 = palm(r1, r1[1]);   // level 1 repeats the T1-I1 points
+    const fill2 = palm(r2, r2[2]);   // level 2 adds points along T2-M2
+
+    const levels = [Array(5).fill(wrist), r1, r2, r3, r4, r5];
+    const fill = [];
+    let segmentLength = 0;
+    for (let l = 0; l < 5; l++) {
+      let A = levels[l];
+      const B = levels[l + 1];
+      if (B.length < A.length) A = A.slice(1);   // the thumb has no level 5
+      for (let i = 0; i < A.length; i++) {
+        segmentLength = dist(A[i], B[i]);
+        fill.push(...interpolate(A[i], B[i], Math.ceil(segmentLength / prof.fillSpacing) - 1));
+      }
+    }
+    // As in the MATLAB code, the palm lines take their point count from the last segment above
+    for (let i = 0; i < fill1.length; i++) {
+      const pts = interpolate(fill1[i], fill2[i], Math.ceil(segmentLength / prof.fillSpacing) - 1);
+      fill.push(...pts.slice(0, -1));
+    }
+    const joints = [...r1, ...r2, ...r3, ...r4, ...r5];
+    return { wrist, r1, r2, r3, r4, r5, fill, fill1, fill2, points: [...joints, ...fill] };
+  }
+
+  const roundHalfAway = v => Math.sign(v) * Math.round(Math.abs(v));
+
+  // voxelizeHand: centre the points in the grid; one seed voxel per point
+  function seeds(sk) {
+    const r = sk.points.map(q => [LX - q[1], q[0], q[2]]);
+    const lo = [0, 1, 2].map(d => Math.min(...r.map(q => q[d])));
+    const hi = [0, 1, 2].map(d => Math.max(...r.map(q => q[d])));
+    const dims = [LX, LY, LZ];
+    const offset = [0, 1, 2].map(d => -(lo[d] - (dims[d] - (hi[d] - lo[d])) / 2));
+    const set = new Set(), list = [];
+    for (const q of r) {
+      const v = [0, 1, 2].map(d => roundHalfAway(q[d] + offset[d]));
+      if (v.some((c, d) => c < 1 || c > dims[d])) continue;
+      const key = (v[0] * 1000 + v[1]) * 1000 + v[2];
+      if (!set.has(key)) { set.add(key); list.push(v); }
+    }
+    return { offset, voxels: list };
+  }
+
+  // dilateBall: offsets of the ball, and the highest dz for every (dx, dy)
+  const ballCache = new Map();
+  function ball(r) {
+    if (ballCache.has(r)) return ballCache.get(r);
+    const n = Math.ceil(r), offsets = [], top = new Map();
+    for (let dx = -n; dx <= n; dx++) for (let dy = -n; dy <= n; dy++) for (let dz = -n; dz <= n; dz++) {
+      if (Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)) > r) continue;
+      offsets.push([dx, dy, dz]);
+      const k = dx + ',' + dy;
+      if (!top.has(k) || top.get(k)[2] < dz) top.set(k, [dx, dy, dz]);
+    }
+    const b = { offsets, top: [...top.values()] };
+    ballCache.set(r, b);
+    return b;
+  }
+
+  // model2depthImage of the dilated volume, without building the volume:
+  // row-major LX x LY, value = highest occupied depth index (1-based), 0 = background
+  function depthImage(vox, radius) {
+    const img = new Uint8Array(LX * LY), { top } = ball(radius);
+    for (const [i, j, k] of vox) for (const [dx, dy, dz] of top) {
+      const x = i + dx, y = j + dy;
+      if (x < 1 || x > LX || y < 1 || y > LY) continue;
+      const z = Math.min(k + dz, LZ, 255);
+      const idx = (x - 1) * LY + (y - 1);
+      if (z > img[idx]) img[idx] = z;
+    }
+    return img;
+  }
+
+  // The dilated volume itself, for the voxel view. Index ((i-1)*LY + (j-1))*LZ + (k-1).
+  function volume(vox, radius) {
+    const vol = new Uint8Array(LX * LY * LZ), { offsets } = ball(radius);
+    for (const [i, j, k] of vox) for (const [dx, dy, dz] of offsets) {
+      const x = i + dx, y = j + dy, z = k + dz;
+      if (x < 1 || x > LX || y < 1 || y > LY || z < 1 || z > LZ) continue;
+      vol[((x - 1) * LY + (y - 1)) * LZ + (z - 1)] = 1;
+    }
+    return vol;
+  }
+
+  // renderDepthHand: posture vector (27 values) + profile + extra view rotation
+  function render(pvec, { scale = 3, fp = 1, pw = 4, view = [0, 0, 0] } = {}) {
+    const p = {};
+    PARAMS.forEach((n, i) => { p[n] = pvec[i]; });
+    p.phi1_x += view[0]; p.phi1_y += view[1]; p.phi1_z += view[2];
+    const prof = profile(scale, fp, pw);
+    const sk = skeleton(p, prof);
+    const sd = seeds(sk);
+    const radius = (4 / 5) * scale;
+    return { prof, sk, offset: sd.offset, voxels: sd.voxels, radius, depth: depthImage(sd.voxels, radius) };
+  }
+
+  return { LX, LY, LZ, PARAMS, profile, skeleton, seeds, ball, depthImage, volume, render };
+})();
+if (typeof module !== 'undefined') module.exports = HandModel;
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+'use strict';
+const { LX, LY, LZ } = HandModel;
+const DICTS = JSON.parse(document.getElementById('postures').textContent.replace(/\/\*[^*]*\*\//g, ''));
+const params = new URLSearchParams(location.search);
+const LOGO = params.has('logo');
+const $ = id => document.getElementById(id);
+const DEG = Math.PI / 180;
+
+/* ---------- State ---------- */
+const state = {
+  mode: 'skeleton', dict: 0, posture: DICTS[0].postures[4],   // Enum5, the open hand
+  scale: 3, fp: 1, pw: 4, view: [0, 0, 0], joints: null, spin: false, seeds: true,
+};
+let model = null;          // HandModel.render result for the current state
+let centre = [0, 0, 0];    // model-space centre of the grid (the hand is centred in it)
+
+/* ---------- three.js scene ---------- */
+const stage = $('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: LOGO });
+renderer.setPixelRatio(LOGO ? 1 : Math.min(window.devicePixelRatio, 2));
+renderer.domElement.className = 'gl';
+stage.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d0f12);
+// Orthographic, like the projection of the depth image
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -2000, 2000);
+camera.position.set(0, 0, 400);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xfff4ea, 0x2a2f38, 0.75));
+const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+sun.position.set(0.4, 0.6, 1);
+camera.add(sun);
+scene.add(camera);
+
+const pivot = new THREE.Group();  // turns for "Rotate slowly"
+scene.add(pivot);
+const hand = new THREE.Group();   // model space, shifted so the grid centre is at the origin
+pivot.add(hand);
+
+const COLORS = { bone: 0xe9e4de, joint: 0xec7a43, seed: 0x9aa3ad, palm: 0x46b98a, skin: 0xe0b49a };
+const unitSphere = new THREE.SphereGeometry(1, 24, 16);
+const unitCylinder = new THREE.CylinderGeometry(1, 1, 1, 10, 1).translate(0, 0.5, 0);
+
+// Sphere material that can fade from lit skin to the grey of the depth image
+const blobMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    uSkin: { value: new THREE.Color(COLORS.skin) }, uDepth: { value: 0 },
+    uZmax: { value: 0 }, uGain: { value: 6 / 255 }, uLight: { value: new THREE.Vector3(0.4, 0.6, 1).normalize() },
+  },
+  vertexShader: `
+    varying vec3 vN; varying float vZ;
+    void main() {
+      vec4 p = vec4(position, 1.0);
+      vec3 n = normal;
+      #ifdef USE_INSTANCING
+        p = instanceMatrix * p;
+        n = mat3(instanceMatrix) * n;
+      #endif
+      vZ = p.z;
+      vN = normalize(normalMatrix * n);
+      gl_Position = projectionMatrix * modelViewMatrix * p;
+    }`,
+  fragmentShader: `
+    uniform vec3 uSkin; uniform float uDepth, uZmax, uGain; uniform vec3 uLight;
+    varying vec3 vN; varying float vZ;
+    void main() {
+      float lit = 0.35 + 0.65 * max(dot(normalize(vN), uLight), 0.0);
+      vec3 skin = uSkin * lit;
+      float g = clamp(1.0 - uGain * (uZmax - vZ), 60.0 / 255.0, 1.0);
+      gl_FragColor = vec4(mix(skin, vec3(g), uDepth), 1.0);
+    }`,
+});
+
+const objects = {};   // meshes of the current hand, rebuilt by buildScene
+function disposeHand() {
+  for (const o of Object.values(objects)) {
+    hand.remove(o);
+    if (o.geometry && o.geometry !== unitSphere && o.geometry !== unitCylinder) o.geometry.dispose();
+    if (o.material && o.material !== blobMaterial) {
+      if (o.material.map) o.material.map.dispose();
+      o.material.dispose();
+    }
+  }
+  for (const k of Object.keys(objects)) delete objects[k];
+}
+
+function instanced(geometry, material, n) {
+  const m = new THREE.InstancedMesh(geometry, material, Math.max(n, 1));
+  m.count = n;
+  return m;
+}
+
+// Bones of the skeleton: [from, to, level], level 0 = wrist to finger base
+function bones(sk) {
+  const out = [];
+  const chainOf = f => f === 0 ? [sk.wrist, sk.r1[0], sk.r2[0], sk.r3[0], sk.r4[0]]
+                               : [sk.wrist, sk.r1[f], sk.r2[f], sk.r3[f], sk.r4[f], sk.r5[f - 1]];
+  for (let f = 0; f < 5; f++) {
+    const c = chainOf(f);
+    for (let l = 0; l < c.length - 1; l++) out.push([c[l], c[l + 1], l]);
+  }
+  // across the palm at levels 1 and 2
+  for (const r of [sk.r1, sk.r2]) for (let f = 0; f < 4; f++) out.push([r[f], r[f + 1], r === sk.r1 ? 1 : 2]);
+  return out;
+}
+
+const tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpV = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+function setBone(mesh, i, a, b, radius) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
+  const d = tmpV.subVectors(B, A), len = d.length();
+  tmpQ.setFromUnitVectors(up, d.clone().normalize());
+  tmpM.compose(A, tmpQ, new THREE.Vector3(radius, Math.max(len, 1e-6), radius));
+  mesh.setMatrixAt(i, tmpM);
+}
+function setBall(mesh, i, p, radius) {
+  tmpM.compose(new THREE.Vector3(...p), tmpQ.identity(), new THREE.Vector3(radius, radius, radius));
+  mesh.setMatrixAt(i, tmpM);
+}
+
+function buildScene() {
+  disposeHand();
+  const { sk, prof, radius } = model;
+  const s = prof.scale;
+  hand.position.set(-centre[0], -centre[1], -centre[2]);
+
+  // Skeleton: bones, joints, seed points
+  const bl = bones(sk);
+  objects.bones = instanced(unitCylinder, new THREE.MeshStandardMaterial({ color: COLORS.bone, roughness: 0.6 }), bl.length);
+  objects.bones.userData.list = bl;
+  bl.forEach(([a, b], i) => setBone(objects.bones, i, a, b, 0.09 * s));
+  const joints = [sk.wrist, ...sk.r1, ...sk.r2, ...sk.r3, ...sk.r4, ...sk.r5];
+  objects.joints = instanced(unitSphere, new THREE.MeshStandardMaterial({ color: COLORS.joint, roughness: 0.45 }), joints.length);
+  joints.forEach((p, i) => setBall(objects.joints, i, p, 0.28 * s));
+  objects.joints.userData.levels = [0, ...Array(5).fill(1), ...Array(5).fill(2), ...Array(5).fill(3), ...Array(5).fill(4), ...Array(4).fill(5)];
+  objects.joints.userData.list = joints;
+  objects.fill = instanced(unitSphere, new THREE.MeshStandardMaterial({ color: COLORS.seed, roughness: 0.8 }), sk.fill.length);
+  sk.fill.forEach((p, i) => setBall(objects.fill, i, p, 0.13 * s));
+  const palm = [...sk.fill1, ...sk.fill2];
+  objects.palm = instanced(unitSphere, new THREE.MeshStandardMaterial({ color: COLORS.palm, roughness: 0.6 }), palm.length);
+  palm.forEach((p, i) => setBall(objects.palm, i, p, 0.18 * s));
+
+  // Volume: a ball of the dilation radius on every seed point (the continuous version of dilateBall)
+  const pts = sk.points;
+  objects.blobs = instanced(unitSphere, blobMaterial, pts.length);
+  objects.blobs.userData.list = pts;
+  pts.forEach((p, i) => setBall(objects.blobs, i, p, radius));
+  const zmax = Math.max(...model.depth) - model.offset[2];   // model z of the nearest voxel
+  const zs = model.depth.filter(v => v > 0);
+  const range = Math.max(1, Math.max(...zs) - Math.min(...zs));
+  blobMaterial.uniforms.uZmax.value = zmax;
+  blobMaterial.uniforms.uGain.value = Math.min(6, 195 / range) / 255;
+
+  // Depth image as a plane in model space, pixel-aligned with the voxels
+  const tex = new THREE.DataTexture(depthRGBA(true), LY, LX, THREE.RGBAFormat);
+  tex.magFilter = tex.minFilter = THREE.NearestFilter;
+  tex.flipY = false;
+  tex.needsUpdate = true;
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(LY, LX),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  // pixel (row i, col j) is model (j - off1, LX - (i - off0)); texture row 0 = image row 1 at the top
+  plane.position.set((1 + LY) / 2 - model.offset[1], LX - ((1 + LX) / 2 - model.offset[0]), zmax + radius + 1);
+  plane.scale.y = -1;
+  plane.renderOrder = 2;
+  objects.depthPlane = plane;
+
+  for (const o of Object.values(objects)) { o.frustumCulled = false; hand.add(o); }
+  if (state.mode === 'voxels') buildVoxels();
+}
+
+// Surface voxels of the dilated volume
+function buildVoxels() {
+  if (objects.voxels) return;
+  const vol = HandModel.volume(model.voxels, model.radius);
+  const at = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= LX || y >= LY || z >= LZ) ? 0 : vol[(x * LY + y) * LZ + z];
+  const surface = [];
+  for (let x = 0; x < LX; x++) for (let y = 0; y < LY; y++) for (let z = 0; z < LZ; z++) {
+    if (!vol[(x * LY + y) * LZ + z]) continue;
+    if (at(x - 1, y, z) && at(x + 1, y, z) && at(x, y - 1, z) && at(x, y + 1, z) && at(x, y, z - 1) && at(x, y, z + 1)) continue;
+    surface.push([x + 1, y + 1, z + 1]);
+  }
+  const box = new THREE.BoxGeometry(0.94, 0.94, 0.94);
+  const mesh = instanced(box, new THREE.MeshStandardMaterial({ color: COLORS.skin, roughness: 0.9 }), surface.length);
+  const o = model.offset;
+  surface.forEach(([i, j, k], n) => {
+    tmpM.makeTranslation(j - o[1], LX - (i - o[0]), k - o[2]);
+    mesh.setMatrixAt(n, tmpM);
+  });
+  mesh.frustumCulled = false;
+  objects.voxels = mesh;
+  hand.add(mesh);
+  model.surfaceVoxels = surface.length;
+}
+
+/* ---------- Depth image ---------- */
+// Display mapping of the README figures: the nearest voxel is white, at most 6 grey levels per voxel
+function depthRGBA(transparentBackground) {
+  const d = model.depth, out = new Uint8Array(LX * LY * 4);
+  let lo = 255, hi = 0;
+  for (const v of d) if (v) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  const gain = Math.min(6, 195 / Math.max(1, hi - lo));
+  for (let i = 0; i < d.length; i++) {
+    const g = d[i] ? Math.round(255 - gain * (hi - d[i])) : 0;
+    out.set([g, g, g, d[i] || !transparentBackground ? 255 : 0], i * 4);
+  }
+  return out;
+}
+const depthCanvas = $('depth');
+function drawDepth() {
+  const ctx = depthCanvas.getContext('2d');
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(depthRGBA(false).buffer), LY, LX), 0, 0);
+}
+depthCanvas.addEventListener('mousemove', e => {
+  const r = depthCanvas.getBoundingClientRect();
+  const col = Math.floor((e.clientX - r.left) / r.width * LY), row = Math.floor((e.clientY - r.top) / r.height * LX);
+  if (row < 0 || col < 0 || row >= LX || col >= LY) return;
+  $('hud-right').textContent = `row ${row + 1}, col ${col + 1}: depth ${model.depth[row * LY + col]}`;
+});
+depthCanvas.addEventListener('mouseleave', updateHud);
+$('save').addEventListener('click', () => {
+  // the stored image values, not the display mapping
+  const c = document.createElement('canvas');
+  c.width = LY; c.height = LX;
+  const img = new ImageData(LY, LX);
+  model.depth.forEach((v, i) => img.data.set([v, v, v, 255], i * 4));
+  c.getContext('2d').putImageData(img, 0, 0);
+  c.toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `hand_${state.posture.id}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+});
+
+/* ---------- Model update ---------- */
+function currentVector() {
+  const p = state.posture.p.slice();
+  if (state.joints) for (let i = 6; i < 27; i++) p[i] = state.joints[i];
+  return p;
+}
+function update(rebuildView = true) {
+  model = HandModel.render(currentVector(), { scale: state.scale, fp: state.fp, pw: state.pw, view: state.view });
+  // grid centre in model space: voxel (LX/2+.5, LY/2+.5, LZ/2+.5) mapped back
+  const o = model.offset;
+  centre = [(LY + 1) / 2 - o[1], LX - ((LX + 1) / 2 - o[0]), (LZ + 1) / 2 - o[2]];
+  buildScene();
+  drawDepth();
+  applyMode();
+  if (rebuildView) fitCamera();
+  updateHud();
+}
+
+function applyMode() {
+  const m = state.mode;
+  objects.bones.visible = objects.joints.visible = m === 'skeleton';
+  objects.fill.visible = objects.palm.visible = m === 'skeleton' && state.seeds;
+  objects.blobs.visible = m === 'volume';
+  objects.depthPlane.visible = false;
+  if (m === 'voxels') buildVoxels();
+  if (objects.voxels) objects.voxels.visible = m === 'voxels';
+  blobMaterial.uniforms.uDepth.value = 0;
+  $('depth-view').hidden = m !== 'depth';
+  renderer.domElement.style.visibility = m === 'depth' ? 'hidden' : 'visible';
+  $('save').hidden = m !== 'depth';
+  for (const b of document.querySelectorAll('#mode button')) b.setAttribute('aria-pressed', b.dataset.mode === m);
+}
+
+function updateHud() {
+  if (!model) return;
+  const n = model.depth.reduce((a, v) => a + (v > 0), 0);
+  const extra = state.mode === 'voxels' && model.surfaceVoxels ? `, ${model.surfaceVoxels} surface voxels` : '';
+  $('hud-left').textContent = `${state.posture.name} (id ${state.posture.id})${state.joints ? ', edited' : ''}`;
+  $('hud-right').textContent = `${model.sk.points.length} seed points, ball r = ${model.radius.toFixed(1)}${extra}, ${n} hand pixels`;
+}
+
+/* ---------- Camera ---------- */
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  const half = viewSize / 2, aspect = w / h;
+  camera.left = -half * Math.max(aspect, 1); camera.right = half * Math.max(aspect, 1);
+  camera.top = half / Math.min(aspect, 1); camera.bottom = -half / Math.min(aspect, 1);
+  camera.updateProjectionMatrix();
+}
+let viewSize = 100;
+function fitCamera() {
+  // frame the hand from the depth camera's point of view (looking down -z)
+  const pts = model.sk.points;
+  let r = 0;
+  for (const p of pts) r = Math.max(r, Math.hypot(p[0] - centre[0], p[1] - centre[1], p[2] - centre[2]));
+  viewSize = 2 * (r + model.radius) * 1.12;
+  // a little off the depth camera's axis, so that the 3D views read as 3D
+  const az = playing || LOGO ? 0 : -0.45, el = playing || LOGO ? 0 : 0.22;
+  camera.position.set(400 * Math.sin(az) * Math.cos(el), 400 * Math.sin(el), 400 * Math.cos(az) * Math.cos(el));
+  camera.zoom = 1;
+  controls.target.set(0, 0, 0);
+  controls.update();
+  resize();
+}
+window.addEventListener('resize', resize);
+
+/* ---------- Controls ---------- */
+function slider(parent, label, { min, max, step, value, fmt }, oninput) {
+  const row = document.createElement('label');
+  row.className = 'slider';
+  row.innerHTML = `<span>${label}</span><input type="range" min="${min}" max="${max}" step="${step}" value="${value}"><output></output>`;
+  const input = row.querySelector('input'), out = row.querySelector('output');
+  const show = () => { out.textContent = fmt(+input.value); };
+  input.addEventListener('input', () => { show(); oninput(+input.value); });
+  show();
+  parent.appendChild(row);
+  return { set(v) { input.value = v; show(); } };
+}
+const fixed = d => v => v.toFixed(d);
+const degrees = v => `${Math.round(v)}°`;
+
+let pending = 0;
+function scheduleUpdate(rebuildView = false) {
+  cancelAnimationFrame(pending);
+  pending = requestAnimationFrame(() => update(rebuildView));
+}
+
+const profileSliders = {
+  scale: slider($('profile'), 'Scale', { min: 2, max: 7.5, step: 0.1, value: 3, fmt: fixed(1) }, v => { state.scale = v; scheduleUpdate(true); }),
+  fp: slider($('profile'), 'FP-AR', { min: 0.7, max: 1.5, step: 0.05, value: 1, fmt: fixed(2) }, v => { state.fp = v; scheduleUpdate(); }),
+  pw: slider($('profile'), 'PW', { min: 2, max: 5, step: 0.5, value: 4, fmt: fixed(1) }, v => { state.pw = v; scheduleUpdate(); }),
+};
+const viewSliders = ['x', 'y', 'z'].map((ax, i) => slider($('view'), `Δθ₁${['ˣ', 'ʸ', 'ᶻ'][i]}`,
+  { min: -90, max: 90, step: 1, value: 0, fmt: degrees }, v => { state.view[i] = v * DEG; scheduleUpdate(); }));
+$('random-view').addEventListener('click', () => {
+  // the range of the thesis: x in [0, pi/8], y and z in [-pi/8, pi/8]
+  const r = [Math.random() * 22.5, (Math.random() * 2 - 1) * 22.5, (Math.random() * 2 - 1) * 22.5].map(Math.round);
+  r.forEach((v, i) => { viewSliders[i].set(v); state.view[i] = v * DEG; });
+  update(false);
+});
+$('front-view').addEventListener('click', () => {
+  viewSliders.forEach(s => s.set(0));
+  state.view = [0, 0, 0];
+  update(true);
+});
+
+// Joint sliders, in the order of struct2plain
+const JOINTS = [
+  ['Thumb', [[6, 'T1 flex'], [7, 'T1 abd'], [8, 'T2 flex'], [9, 'T2 abd'], [10, 'T3']]],
+  ['Index', [[11, 'I2 flex'], [12, 'I2 abd'], [13, 'I3 flex'], [14, 'I4 flex']]],
+  ['Middle', [[15, 'M2 flex'], [16, 'M2 abd'], [17, 'M3 flex'], [18, 'M4 flex']]],
+  ['Ring', [[19, 'R2 flex'], [20, 'R2 abd'], [21, 'R3 flex'], [22, 'R4 flex']]],
+  ['Little', [[23, 'L2 flex'], [24, 'L2 abd'], [25, 'L3 flex'], [26, 'L4 flex']]],
+];
+const jointSliders = {};
+for (const [finger, list] of JOINTS) {
+  const h = document.createElement('div');
+  h.className = 'finger';
+  h.textContent = finger;
+  $('joints').appendChild(h);
+  for (const [i, name] of list) {
+    jointSliders[i] = slider($('joints'), name, { min: -90, max: 120, step: 1, value: 0, fmt: degrees }, v => {
+      if (!state.joints) state.joints = state.posture.p.slice();
+      state.joints[i] = v * DEG;
+      scheduleUpdate();
+    });
+  }
+}
+function syncJointSliders() {
+  const p = state.joints || state.posture.p;
+  for (const i of Object.keys(jointSliders)) jointSliders[i].set(Math.round(p[i] / DEG));
+}
+$('reset-joints').addEventListener('click', () => { state.joints = null; syncJointSliders(); update(false); });
+
+// Dictionaries and gestures
+DICTS.forEach((d, i) => {
+  const o = document.createElement('option');
+  o.value = i;
+  o.textContent = `${d.name} (${d.postures.length})`;
+  $('dict').appendChild(o);
+});
+function showGestures() {
+  const box = $('gestures');
+  box.textContent = '';
+  for (const g of DICTS[state.dict].postures) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = g.name;
+    b.title = `Posture id ${g.id}`;
+    b.setAttribute('aria-pressed', g === state.posture);
+    b.addEventListener('click', () => selectPosture(g));
+    box.appendChild(b);
+  }
+}
+function selectPosture(g) {
+  state.posture = g;
+  state.joints = null;
+  syncJointSliders();
+  showGestures();
+  update(true);
+}
+$('dict').addEventListener('change', e => { state.dict = +e.target.value; selectPosture(DICTS[state.dict].postures[0]); });
+
+function setMode(m) {
+  stopPipeline();
+  state.mode = m;
+  applyMode();
+  updateHud();
+}
+for (const b of document.querySelectorAll('#mode button')) b.addEventListener('click', () => setMode(b.dataset.mode));
+window.addEventListener('keydown', e => {
+  if (e.target.matches('input, select')) return;
+  const m = { 1: 'skeleton', 2: 'volume', 3: 'voxels', 4: 'depth' }[e.key];
+  if (m) setMode(m);
+});
+$('spin').addEventListener('change', e => { state.spin = e.target.checked; });
+$('seeds').addEventListener('change', e => { state.seeds = e.target.checked; applyMode(); });
+
+/* ---------- The pipeline animation (also the README logo) ---------- */
+// t in [0, 1): bones grow, seed points appear, the balls grow to the dilation radius,
+// the shading turns into depth, and the depth image replaces the volume.
+const smooth = (a, b, t) => { const x = Math.min(Math.max((t - a) / (b - a), 0), 1); return x * x * (3 - 2 * x); };
+const PHASES = [[0, 'skeleton'], [0.22, 'seed points'], [0.33, 'dilation'], [0.58, 'depth'], [0.72, 'depth image']];
+function pipelineFrame(t) {
+  const { sk, radius, prof } = model;
+  const s = prof.scale;
+  // camera: swing round the hand, back to the depth camera's view for the depth phases
+  const swing = Math.sin(Math.PI * smooth(0, 0.62, t));
+  const az = 0.75 * swing, el = 0.28 * swing;
+  const dist = 400;
+  camera.position.set(dist * Math.sin(az) * Math.cos(el), dist * Math.sin(el), dist * Math.cos(az) * Math.cos(el));
+  camera.lookAt(0, 0, 0);
+  controls.target.set(0, 0, 0);
+
+  // 1. bones grow level by level, joints pop in
+  const grow = smooth(0, 0.2, t) * 5.2;
+  const fadeBones = 1 - smooth(0.45, 0.56, t);
+  const bl = objects.bones.userData.list;
+  bl.forEach(([a, b, l], i) => {
+    const f = Math.min(Math.max(grow - l, 0), 1) * fadeBones;
+    const e = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    setBone(objects.bones, i, a, e, 0.09 * s * (f > 0 ? 1 : 0));
+  });
+  objects.bones.instanceMatrix.needsUpdate = true;
+  const jl = objects.joints.userData.list, lv = objects.joints.userData.levels;
+  jl.forEach((p, i) => setBall(objects.joints, i, p, 0.28 * s * Math.min(Math.max(grow - lv[i] + 1, 0), 1) * fadeBones));
+  objects.joints.instanceMatrix.needsUpdate = true;
+  objects.bones.visible = objects.joints.visible = fadeBones > 0;
+
+  // 2. seed points
+  const seedsIn = smooth(0.2, 0.3, t) * (1 - smooth(0.5, 0.56, t));
+  objects.fill.visible = objects.palm.visible = seedsIn > 0;
+  objects.fill.scale.setScalar(1); objects.palm.scale.setScalar(1);
+  sk.fill.forEach((p, i) => setBall(objects.fill, i, p, 0.13 * s * seedsIn));
+  objects.fill.instanceMatrix.needsUpdate = true;
+  const palm = [...sk.fill1, ...sk.fill2];
+  palm.forEach((p, i) => setBall(objects.palm, i, p, 0.18 * s * seedsIn));
+  objects.palm.instanceMatrix.needsUpdate = true;
+
+  // 3. dilation: every seed point becomes a ball of radius 0.8 s
+  const dil = smooth(0.33, 0.55, t) * (1 - smooth(0.93, 0.995, t));
+  objects.blobs.visible = dil > 0;
+  objects.blobs.userData.list.forEach((p, i) => setBall(objects.blobs, i, p, radius * dil));
+  objects.blobs.instanceMatrix.needsUpdate = true;
+
+  // 4. shading becomes depth, 5. the depth image (pixels) replaces the volume
+  blobMaterial.uniforms.uDepth.value = smooth(0.58, 0.68, t);
+  const img = smooth(0.7, 0.76, t) * (1 - smooth(0.93, 0.995, t));
+  objects.depthPlane.visible = img > 0;
+  objects.depthPlane.material.opacity = img;
+  if (objects.voxels) objects.voxels.visible = false;
+
+  let phase = '';
+  for (const [start, name] of PHASES) if (t >= start) phase = name;
+  if (t > 0.93) phase = '';
+  $('caption').innerHTML = phase ? phase.replace(/^(\S+)/, '<b>$1</b>') : '';
+}
+
+let playing = null;   // {start} while the animation runs in the viewer
+const PERIOD = 6500;
+$('play').addEventListener('click', () => {
+  if (playing) { stopPipeline(); return; }
+  state.mode = 'volume';
+  applyMode();
+  $('depth-view').hidden = true;
+  renderer.domElement.style.visibility = 'visible';
+  $('caption').hidden = false;
+  controls.enabled = false;
+  pivot.rotation.y = 0;
+  fitCamera();
+  playing = { start: performance.now() };
+  $('play').textContent = '■ Stop';
+});
+function stopPipeline() {
+  if (!playing) return;
+  playing = null;
+  controls.enabled = true;
+  $('caption').hidden = true;
+  $('play').textContent = '▶ Play the pipeline';
+  buildScene();   // restore the instance matrices
+  applyMode();
+  fitCamera();
+}
+
+/* ---------- Main loop ---------- */
+let last = performance.now();
+function loop(now) {
+  const dt = (now - last) / 1000;
+  last = now;
+  if (playing) {
+    const t = ((now - playing.start) % PERIOD) / PERIOD;
+    pipelineFrame(t);
+  } else {
+    if (state.spin && state.mode !== 'depth') pivot.rotation.y += dt * 0.35;
+    controls.update();
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- Start ---------- */
+if (LOGO) {
+  // ?logo[&size=360][&id=101]: square stage driven frame by frame through window.logoFrame(t)
+  document.body.classList.add('logo');
+  const size = +(params.get('size') || 360);
+  document.documentElement.style.setProperty('--logo-size', size + 'px');
+  const id = +(params.get('id') || 101);
+  for (const [i, d] of DICTS.entries()) {
+    const g = d.postures.find(q => q.id === id);
+    if (g) { state.dict = i; state.posture = g; }
+  }
+  state.view = [Math.PI / 16, 0, 0];
+  update(true);
+  // frame the silhouette of the depth image, a little above the caption
+  let r0 = LX, r1 = 0, c0 = LY, c1 = 0;
+  model.depth.forEach((v, i) => {
+    if (!v) return;
+    const r = Math.floor(i / LY) + 1, c = (i % LY) + 1;
+    r0 = Math.min(r0, r); r1 = Math.max(r1, r); c0 = Math.min(c0, c); c1 = Math.max(c1, c);
+  });
+  const o = model.offset;
+  const mid = [(c0 + c1) / 2 - o[1], LX - ((r0 + r1) / 2 - o[0])];
+  viewSize = Math.max(c1 - c0, r1 - r0) * 1.3;
+  pivot.position.set(centre[0] - mid[0], centre[1] - mid[1] + 0.07 * viewSize, 0);
+  resize();
+  $('caption').hidden = params.get('caption') === '0';
+  state.mode = 'volume';
+  applyMode();
+  controls.enabled = false;
+  window.logoFrame = t => { pipelineFrame(t); renderer.render(scene, camera); };
+  window.logoFrame(0.5);
+  document.body.dataset.ready = '1';
+} else {
+  $('dict').value = 0;
+  syncJointSliders();
+  showGestures();
+  update(true);
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

@@ -1,10 +1,12 @@
 # Synthetic hands generator
 
+<p align="center">
+  <img src="docs/img/logo.gif" width="360" alt="A hand making the 'I love you' sign, built step by step: the skeleton, its seed points, the dilated volume and the depth image">
+</p>
+
 Generates synthetic **depth images of human hand postures** from a 27-DOF
 kinematic hand model. Runs in MATLAB and GNU Octave, with no toolboxes
 required.
-
-![Contact sheet of synthetic depth hands](docs/img/contact_sheet.png)
 
 This is the generator behind the synthetic part of the hand gesture corpus in
 the PhD thesis *Contributions to Hand Gesture Recognition on the basis of
@@ -14,6 +16,27 @@ synthetic data alone and then evaluate them on recordings of real people.
 
 > **Status:** research code from 2009–2013, cleaned up and published for
 > reference. It is not actively developed.
+
+## Interactive viewer
+
+[viewer/hand-viewer.html](viewer/hand-viewer.html) is the same model in the
+browser: a single file with the whole posture dictionary embedded. Download it
+and open it in a browser. It loads three.js from a CDN, so it needs an
+internet connection.
+
+- **Four render modes**: **Skeleton** (bones, joints and seed points),
+  **Volume** (a ball on every seed point), **Voxels** (the dilated voxel
+  grid) and **Depth** (the 144×176 image). Keys `1`–`4` switch between them.
+- **Every gesture** of the five dictionaries, with sliders for the hand
+  profile (scale, FP-AR, PW), the point of view and all 21 joint angles.
+- **Play the pipeline**, the animation at the top of this page.
+- **Save depth PNG** writes the depth image with its stored values.
+
+The JavaScript port renders pixel-identical depth images to the Octave code.
+`tests/viewer_test.mjs` checks every posture under three profiles and points
+of view. The animation is recorded with `viewer/tools/record_logo.mjs`.
+
+![The viewer, in Skeleton mode](docs/img/viewer.png)
 
 ## How it works
 
@@ -221,12 +244,27 @@ scripts/
   make_videos.m          per-posture AVI videos from a dataset folder
   demo_skeleton.m        skeleton, voxel volume and depth image of a posture
   demo_points_of_view.m  one posture from a 3×3 grid of views
-tests/smoke_test.m       renders every posture and checks reference outputs
-hands_demo.m             renders the contact sheet above
-docs/make_figures.m      renders the other figures of this README
+viewer/
+  hand-viewer.html       interactive viewer (three.js), a single file
+  export_postures.m      embeds the posture dictionary in the viewer
+  tools/record_logo.mjs  records docs/img/logo.gif from the viewer
+tests/
+  smoke_test.m           renders every posture and checks reference outputs
+  viewer_test.mjs        compares the viewer's depth images with Octave's
+hands_demo.m             renders a contact sheet of postures
+docs/make_figures.m      renders the figures of this README
 ```
 
-Run the tests with `octave --no-gui --eval "run('tests/smoke_test.m')"`.
+Run the tests from the repository root:
+
+```sh
+octave --no-gui --eval "run('tests/smoke_test.m')"
+octave --no-gui --eval "run('tests/export_viewer_reference.m')"
+node tests/viewer_test.mjs
+```
+
+After changing the postures in `generateHandParameters`, run
+`viewer/export_postures.m` to update the viewer.
 
 ## Changes from the thesis code
 

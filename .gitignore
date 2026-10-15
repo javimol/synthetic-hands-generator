@@ -8,3 +8,5 @@ pBestplain.dat
 *.asv
 *.m~
 octave-workspace
+tests/viewer_reference.txt
+node_modules/
